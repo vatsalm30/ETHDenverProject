@@ -1,0 +1,26 @@
+# Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+sdk-version: 3.4.10
+name: splice-token-test-trading-app
+description: |
+  A trading app PoC built on top of the allocation APIs of the Canton Network Token Standard.
+
+  Serves both as an example as well as a test suite for the token standard APIs.
+version: 1.0.0
+source: daml
+dependencies:
+  - daml-prim
+  - daml-stdlib
+data-dependencies:
+  - ../../dars/splice-api-token-metadata-v1-1.0.0.dar
+  - ../../dars/splice-api-token-allocation-v1-1.0.0.dar
+  - ../../dars/splice-api-token-allocation-request-v1-1.0.0.dar
+build-options:
+  - --ghc-option=-Wunused-binds
+  - --ghc-option=-Wunused-matches
+codegen:
+  java:
+    package-prefix: org.lfdecentralizedtrust.splice.codegen.java
+    decoderClass: org.lfdecentralizedtrust.splice.codegen.java.DecoderSpliceTestTradingApp
+    output-directory: target/scala-2.13/src_managed/main/daml-codegen-java

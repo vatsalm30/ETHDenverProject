@@ -1,0 +1,63 @@
+# Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  backend-service:
+    image: "eclipse-temurin:${JAVA_VERSION}"
+    container_name: backend-service
+    labels:
+      - "description=Backend service supporting the Quickstart Licensing workflow.
+       Note: The APP_PROVIDER_PARTY environment variable is dynamically resolved at runtime before the main process is initiated."
+    working_dir: /app
+    env_file:
+      - ./docker/backend-service/env/app.env
+      - ./docker/backend-service/onboarding/env/${AUTH_MODE}.env
+    volumes:
+      - ./backend/build/distributions/backend.tar:/backend.tar
+      - ./docker/backend-service/start.sh:/app/start.sh
+      - onboarding:/onboarding
+      - ./backend/build/otel-agent/opentelemetry-javaagent-${OTEL_AGENT_VERSION}.jar:/otel-agent.jar
+    command: /app/start.sh
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    depends_on:
+      pqs-app-provider:
+        condition: service_started
+      splice-onboarding:
+        condition: service_healthy
+
+  register-app-user-tenant:
+    extends:
+        file: ${MODULES_DIR}/splice-onboarding/compose.yaml
+        service: splice-onboarding
+    container_name: register-app-user-tenant
+    volumes:
+      - ./docker/register-app-user-tenant/${AUTH_MODE}.sh:/app/scripts/on/register-app-user-tenant.sh
+    env_file:
+      - ./docker/register-app-user-tenant/env/${AUTH_MODE}.env
+    environment:
+      - BACKEND_PORT=${BACKEND_PORT}
+    entrypoint: [ "/entrypoint.sh", "--exit-on-finish" ]
+    depends_on:
+      backend-service:
+        condition: service_started
+
+  nginx:
+    volumes:
+      - ./frontend/dist/:/usr/share/nginx/html
+      - ./config/nginx/frontend.conf:/etc/nginx/templates/frontend.conf.template
+      - ./config/nginx/common-backend-proxy-settings.conf:/etc/nginx/templates/common-backend-proxy-settings.conf.template
+    environment:
+      - BACKEND_PORT=${BACKEND_PORT}
+    depends_on:
+      backend-service:
+        condition: service_started
+
+  splice-onboarding:
+    env_file:
+      - ./docker/backend-service/onboarding/env/${AUTH_MODE}.env
+    volumes:
+      - ./docker/backend-service/onboarding/onboarding.sh:/app/scripts/on/backend-service.sh
+      - ./daml/licensing/.daml/dist/quickstart-licensing-0.0.1.dar:/canton/dars/quickstart-licensing-0.0.1.dar
+      - ./integration-test/env-init.sh:/app/scripts/on/integration-tests-environment-init.sh
+      - ./integration-test:/integration-test

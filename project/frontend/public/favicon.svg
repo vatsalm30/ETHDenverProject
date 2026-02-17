@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #00d1ff;
+        fill-rule: evenodd;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        stroke-width: 0px;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+
+      .cls-3 {
+        fill: #001a33;
+      }
+    </style>
+  </defs>
+  <circle class="cls-3" cx="8" cy="8" r="7.81"/>
+  <g>
+    <polygon class="cls-2" points="4.99 8.58 3.85 12.28 6 12.28 7.15 8.58 4.99 8.58"/>
+    <path class="cls-1" d="M6.96,2.43l-1.14,3.69h1.1c.63,0,1.18-.41,1.37-1.01l.83-2.68h-2.15Z"/>
+    <path class="cls-2" d="M9.11,2.43h0s-.83,2.68-.83,2.68c-.07.21-.18.4-.32.55l2.04,6.61h2.15l-3.04-9.84Z"/>
+  </g>
+</svg>

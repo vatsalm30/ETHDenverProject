@@ -1,0 +1,13 @@
+# Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  backend-service:
+    environment:
+      OTEL_SERVICE_NAME: backend-service
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_METRIC_EXPORT_INTERVAL: 5000
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:${OTEL_COLLECTOR_OTLP_PORT}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc

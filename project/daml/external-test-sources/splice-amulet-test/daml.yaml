@@ -1,0 +1,26 @@
+# NOTE : There are SBT jobs that will compile this project into a dar under
+# the usual .daml/dist output directory and run code-gen to create scala case
+# classes. You should either use `daml build` or `sbt ~compile`, but NOT both
+# at the same time (see #179 for more context).
+
+sdk-version: 3.4.10
+name: splice-amulet-test
+source: daml
+version: 0.1.15
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+data-dependencies:
+  - ../../external-test-dars/splice-util-0.1.4.dar
+  - ../../dars/splice-amulet-0.1.14.dar
+  - ../../dars/splice-api-featured-app-v1-1.0.0.dar
+  - ../../dars/splice-api-token-metadata-v1-1.0.0.dar
+  - ../../dars/splice-api-token-holding-v1-1.0.0.dar
+  - ../../dars/splice-api-token-transfer-instruction-v1-1.0.0.dar
+  - ../splice-token-standard-test/.daml/dist/splice-token-standard-test-1.0.6.dar
+build-options:
+  - --ghc-option=-Wunused-binds
+  - --ghc-option=-Wunused-matches
+  - -Wno-template-interface-depends-on-daml-script
+  - -Wno-deprecated-exceptions

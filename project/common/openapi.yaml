@@ -1,0 +1,837 @@
+openapi: 3.0.0
+info:
+  title: Backend API
+  description: API to manage AppInstalls, Licenses and Tenant Registrations
+  version: 1.0.0
+
+tags:
+  - name: Feature Flags
+  - name: Auth
+  - name: Admin
+  - name: App Installs
+  - name: App Installs Requests
+  - name: Licenses
+  - name: licenses Renewal Requests
+
+paths:
+  /feature-flags:
+    get:
+      tags: [Feature Flags]
+      summary: Get feature flags
+      operationId: getFeatureFlags
+      responses:
+        '200':
+          description: A list of feature flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlags'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /login-links:
+    get:
+      tags: [Auth]
+      summary: Get list of links that initiate login
+      operationId: listLinks
+      responses:
+        '200':
+          description: Links that initiate login flows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoginLink'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /user:
+    get:
+      tags: [Auth]
+      summary: Get Authenticated User
+      operationId: getAuthenticatedUser
+      responses:
+        '200':
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/tenant-registrations:
+    get:
+      tags: [Admin]
+      summary: List all Tenant Registrations
+      operationId: listTenantRegistrations
+      responses:
+        '200':
+          description: A list of Tenant Registrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantRegistration'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Admin]
+      summary: Create Tenant Registration
+      operationId: createTenantRegistration
+      requestBody:
+        description: Tenant Registration object
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantRegistrationRequest'
+            examples:
+              oauth2:
+                value:
+                  tenantId: "tenant-123"
+                  partyId: "party-abc"
+                  walletUrl: "http://wallet.localhost:2000/"
+                  clientId: "client-xyz"
+                  issuerUrl: "http://keycloak.localhost:8082/realms/AppProvider"
+                  internal: false
+              sharedSecret:
+                value:
+                  tenantId: "tenant-ss"
+                  partyId: "party-ss"
+                  walletUrl: "http://wallet.localhost:2000/"
+                  users: [ "alice","bob" ]
+                  internal: true
+      responses:
+        '201':
+          description: Registration created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantRegistration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/tenant-registrations/{tenantId}:
+    delete:
+      tags: [Admin]
+      summary: Delete Tenant Registration
+      operationId: deleteTenantRegistration
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '204':
+          description: Tenant registration deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /app-install-requests:
+    get:
+      tags: [App Installs Requests]
+      summary: List all AppInstallRequests
+      operationId: listAppInstallRequests
+      responses:
+        '200':
+          description: A list of AppInstallRequests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppInstallRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /app-install-requests/{contractId}:accept:
+    post:
+      tags: [App Installs Requests]
+      summary: Accept an AppInstallRequest
+      operationId: acceptAppInstallRequest
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: Acceptance parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppInstallRequestAccept'
+      responses:
+        '201':
+          description: AppInstall created from request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppInstall'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /app-install-requests/{contractId}:reject:
+    post:
+      tags: [App Installs Requests]
+      summary: Reject an AppInstallRequest
+      operationId: rejectAppInstallRequest
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: Rejection parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppInstallRequestReject'
+      responses:
+        '204':
+          description: AppInstallRequest rejected
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /app-installs:
+    get:
+      tags: [ App Installs ]
+      summary: List all AppInstalls
+      operationId: listAppInstalls
+      responses:
+        '200':
+          description: A list of AppInstalls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppInstall'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /app-installs/{contractId}:create-license:
+    post:
+      tags: [App Installs]
+      summary: Create a License using the AppInstall
+      operationId: createLicense
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: License creation parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppInstallCreateLicenseRequest'
+      responses:
+        '201':
+          description: License created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppInstallCreateLicenseResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /app-installs/{contractId}:cancel:
+    post:
+      tags: [App Installs]
+      summary: Cancel an AppInstall
+      operationId: cancelAppInstall
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: Cancellation parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppInstallCancel'
+      responses:
+        '204':
+          description: AppInstall canceled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /licenses:
+    get:
+      tags: [Licenses]
+      summary: List all Licenses (including renewal requests)
+      operationId: listLicenses
+      responses:
+        '200':
+          description: A list of Licenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/License'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /licenses/{contractId}:renew:
+    post:
+      tags: [Licenses]
+      summary: Renew a License
+      operationId: renewLicense
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: License renewal parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LicenseRenewRequest'
+      responses:
+        '201':
+          description: Renewal offer/payment request created
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /licenses/{contractId}:complete-renewal:
+    post:
+      tags: [Licenses]
+      summary: Complete the License Renewal
+      operationId: completeLicenseRenewal
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: Complete license renewal parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteLicenseRenewalRequest'
+      responses:
+        '200':
+          description: License renewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseRenewalResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /licenses/{contractId}:expire:
+    post:
+      tags: [Licenses]
+      summary: Expire a License
+      operationId: expireLicense
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        description: Expiration parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LicenseExpireRequest'
+      responses:
+        '200':
+          description: License expired
+          content:
+            text/plain:
+              schema:
+                type: string
+                nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /license-renewal-requests/{contractId}:withdraw:
+    post:
+      tags: [licenses Renewal Requests]
+      summary: Withdraw an LicenseRenewalRequest
+      operationId: withdrawLicenseRenewalRequest
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: LicenseRenewalRequest withdrawn
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    ContractId:
+      name: contractId
+      in: path
+      required: true
+      description: Ledger contract ID
+      schema:
+        type: string
+    CommandId:
+      name: commandId
+      in: query
+      required: true
+      description: The command ID for the ledger transaction
+      schema:
+        type: string
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflict with current state of the resource
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: An internal server error occurred
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    TenantRegistrationRequest:
+      type: object
+      required:
+        - tenantId
+        - partyId
+        - walletUrl
+      properties:
+        tenantId:
+          type: string
+        partyId:
+          type: string
+        walletUrl:
+          type: string
+        clientId:
+          type: string
+          description: Required when authMode is oauth2
+        issuerUrl:
+          type: string
+          description: Required when authMode is oauth2
+        users:
+          type: array
+          description: Required (non-empty) when authMode is shared-secret
+          items:
+            type: string
+
+    TenantRegistration:
+      type: object
+      required:
+        - tenantId
+        - partyId
+        - walletUrl
+        - internal
+      properties:
+        tenantId:
+          type: string
+          description: Tenant identifier
+        partyId:
+          type: string
+          description: Party identifier
+        walletUrl:
+          type: string
+          description: Wallet URL for payment redirects
+          format: uri
+        clientId:
+          type: string
+          description: OAuth2 client identifier
+        issuerUrl:
+          type: string
+          description: Issuer URL
+          format: uri
+        internal:
+          type: boolean
+          description: Internal registration
+        users:
+          type: array
+          items:
+            type: string
+    AuthenticatedUser:
+      type: object
+      required:
+        - name
+        - party
+        - roles
+        - isAdmin
+        - walletUrl
+      properties:
+        name:
+          type: string
+        party:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        isAdmin:
+          type: boolean
+        walletUrl:
+          type: string
+
+    LoginLink:
+      type: object
+      required:
+        - name
+        - url
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+
+    AppInstallRequest:
+      type: object
+      required:
+        - contractId
+        - provider
+        - user
+        - meta
+      properties:
+        contractId:
+          type: string
+        provider:
+          type: string
+        user:
+          type: string
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    AppInstallRequestAccept:
+      type: object
+      required:
+        - installMeta
+        - meta
+      properties:
+        installMeta:
+          $ref: '#/components/schemas/Metadata'
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    AppInstallRequestReject:
+      type: object
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    AppInstallRequestCancel:
+      type: object
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    AppInstall:
+      type: object
+      required:
+        - contractId
+        - provider
+        - user
+        - meta
+        - numLicensesCreated
+        - licenseNum
+      properties:
+        contractId:
+          type: string
+        provider:
+          type: string
+        user:
+          type: string
+        meta:
+          $ref: '#/components/schemas/Metadata'
+        numLicensesCreated:
+          type: integer
+        licenseNum:
+          type: integer
+
+    AppInstallCreateLicenseRequest:
+      type: object
+      required:
+        - params
+      properties:
+        params:
+          $ref: '#/components/schemas/LicenseParams'
+
+    AppInstallCreateLicenseResult:
+      type: object
+      properties:
+        installId:
+          type: string
+        licenseId:
+          type: string
+
+    AppInstallCancel:
+      type: object
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    LicenseParams:
+      type: object
+      properties:
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    License:
+      type: object
+      required:
+        - contractId
+        - provider
+        - user
+        - params
+        - expiresAt
+        - licenseNum
+        - isExpired
+      properties:
+        contractId:
+          type: string
+        provider:
+          type: string
+        user:
+          type: string
+        params:
+          $ref: '#/components/schemas/LicenseParams'
+        expiresAt:
+          type: string
+          format: date-time
+        licenseNum:
+          type: integer
+        isExpired:
+          type: boolean
+        renewalRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/LicenseRenewalRequest'
+
+    Metadata:
+      type: object
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: string
+
+    LicenseRenewRequest:
+      type: object
+      description: Parameters used to initiate a license renewal.
+      required:
+        - licenseFeeCc
+        - licenseExtensionDuration
+        - prepareUntilDuration
+        - settleBeforeDuration
+        - description
+      properties:
+        licenseFeeCc:
+          type: number
+          description: License fee amount
+        licenseExtensionDuration:
+          type: string
+          description: "ISO-8601 duration specifying the requested extension period (e.g. 'P30D' for 30 days)."
+        prepareUntilDuration:
+          type: string
+          description: "ISO-8601 duration after which the allocation request will be not accepted."
+        settleBeforeDuration:
+          type: string
+          description: "ISO-8601 duration within which the transfer must be settled."
+        description:
+          type: string
+          description: Human-readable explanation of the renewal request.
+
+    LicenseRenewalResult:
+      type: object
+      properties:
+        licenseId:
+          type: string
+
+    LicenseRenewalRequest:
+      type: object
+      required:
+          - contractId
+          - provider
+          - user
+          - licenseNum
+          - licenseFeeAmount
+          - licenseFeeInstrument
+          - licenseExtensionDuration
+          - prepareUntil
+          - settleBefore
+          - requestedAt
+          - description
+          - requestId
+          - prepareDeadlinePassed
+          - settleDeadlinePassed
+      properties:
+        contractId:
+          type: string
+        provider:
+          type: string
+        user:
+          type: string
+        licenseNum:
+          type: integer
+        licenseFeeAmount:
+          type: number
+        licenseFeeInstrument:
+          type: string
+        licenseExtensionDuration:
+          type: string
+          description: "RelTime representing how long the license should be extended."
+        prepareUntil:
+            type: string
+            format: date-time
+            description: "The time until the license renewal request can be prepared."
+        settleBefore:
+            type: string
+            format: date-time
+            description: "The time before which the payment must be settled."
+        requestedAt :
+          type: string
+          format: date-time
+          description: "The time until the license renewal request can be prepared."
+        description:
+          type: string
+        requestId:
+          type: string
+        allocationCid:
+          type: string
+        prepareDeadlinePassed:
+          type: boolean
+        settleDeadlinePassed:
+          type: boolean
+
+    LicenseExpireRequest:
+      type: object
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/Metadata'
+
+    CompleteLicenseRenewalRequest:
+      type: object
+      required:
+        - renewalRequestContractId
+        - allocationContractId
+      properties:
+        renewalRequestContractId:
+          type: string
+          description: The contract ID of the LicenseRenewalRequest to complete
+        allocationContractId:
+          type: string
+          description: The contract ID of the accepted allocation
+
+    FeatureFlags:
+      type: object
+      properties:
+        authMode:
+          type: string
+          enum:
+            - oauth2
+            - shared-secret
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          nullable: true
+          example: "TenantId is required"

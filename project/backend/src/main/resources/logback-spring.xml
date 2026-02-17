@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+SPDX-License-Identifier: 0BSD
+-->
+<configuration scan="false">
+
+    <!-- Include Spring Boot defaults (for profile-coloring, etc.) -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <springProperty scope="context" name="LOG_FILE" source="logging.file.name"/>
+    <springProperty scope="context" name="LOG_PATH" source="logging.path"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+             <shortenedLoggerNameLength>30</shortenedLoggerNameLength>
+             <excludeMdcKeyName>err-context</excludeMdcKeyName>
+             <timeZone>UTC</timeZone>
+             <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+             <mdcKeyFieldName>trace_id=trace-id</mdcKeyFieldName>
+             <excludeMdcKeyName>span_id</excludeMdcKeyName>
+             <excludeMdcKeyName>trace_flags</excludeMdcKeyName>
+        </encoder>
+    </appender>
+
+
+    <!-- Root logger set to WARN to prevent noise from any other package -->
+    <root level="WARN">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+
+    <!-- Explicitly set logger for desired package(s) -->
+    <logger name="com.digitalasset.quickstart" level="DEBUG" additivity="false">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </logger>
+
+</configuration>
