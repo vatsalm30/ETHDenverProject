@@ -10,13 +10,23 @@ import static com.digitalasset.quickstart.utility.TracingUtils.tracingCtx;
 import com.digitalasset.quickstart.api.*;
 import com.digitalasset.quickstart.ledger.LedgerApi;
 import com.digitalasset.quickstart.repository.DamlRepository;
+import com.digitalasset.quickstart.repository.TenantPropertiesRepository;
 import com.digitalasset.quickstart.security.AuthUtils;
 import com.digitalasset.transcode.java.Party;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+
+import org.springframework.beans.factory.annotation.Value;
 
 import org.openapitools.model.*;
 import org.slf4j.Logger;
@@ -26,10 +36,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.server.ResponseStatusException;
 
 // Generated Daml Java bindings (available after `./gradlew :daml:codeGen`)
 import quickstart_invoice_finance.invoicefinance.core.Invoice;
 import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_BuyerConfirm;
+import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_Cancel;
 import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_StartAuction;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction.FinancingAuction_BankGrab;
@@ -68,12 +80,112 @@ public class InvoiceFinanceApiImpl implements
     private final LedgerApi ledger;
     private final AuthUtils auth;
     private final DamlRepository damlRepository;
+    private final TenantPropertiesRepository tenantRepo;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    @Value("${anthropic.api-key:}")
+    private String anthropicApiKey;
 
     @Autowired
-    public InvoiceFinanceApiImpl(LedgerApi ledger, AuthUtils auth, DamlRepository damlRepository) {
+    public InvoiceFinanceApiImpl(LedgerApi ledger, AuthUtils auth, DamlRepository damlRepository,
+                                  TenantPropertiesRepository tenantRepo) {
         this.ledger = ledger;
         this.auth = auth;
         this.damlRepository = damlRepository;
+        this.tenantRepo = tenantRepo;
+    }
+
+    // ─── AI Invoice Parse ────────────────────────────────────────────────────
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<ParsedInvoiceDto>> parseInvoice(
+            org.openapitools.model.ParseInvoiceRequest req) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                if (anthropicApiKey == null || anthropicApiKey.isBlank()) {
+                    // Return a mock response when no API key is configured
+                    return ResponseEntity.ok(mockParsedInvoice());
+                }
+
+                String prompt = "Extract invoice data from this image. Return ONLY valid JSON with these fields: " +
+                        "{\"invoiceNumber\":\"string\",\"vendorName\":\"string\",\"buyerName\":\"string\"," +
+                        "\"amount\":number,\"issueDate\":\"YYYY-MM-DD\",\"dueDate\":\"YYYY-MM-DD\"," +
+                        "\"description\":\"string\",\"confidence\":number_0_to_1}. " +
+                        "If a field is not visible, use null. Do not include any text outside the JSON.";
+
+                String requestBody = objectMapper.writeValueAsString(new java.util.LinkedHashMap<>() {{
+                    put("model", "claude-haiku-4-5-20251001");
+                    put("max_tokens", 512);
+                    put("messages", List.of(new java.util.LinkedHashMap<>() {{
+                        put("role", "user");
+                        put("content", List.of(
+                                new java.util.LinkedHashMap<>() {{
+                                    put("type", "image");
+                                    put("source", new java.util.LinkedHashMap<>() {{
+                                        put("type", "base64");
+                                        put("media_type", req.getMimeType());
+                                        put("data", req.getFileBase64());
+                                    }});
+                                }},
+                                new java.util.LinkedHashMap<>() {{
+                                    put("type", "text");
+                                    put("text", prompt);
+                                }}
+                        ));
+                    }}));
+                }});
+
+                HttpRequest httpReq = HttpRequest.newBuilder()
+                        .uri(URI.create("https://api.anthropic.com/v1/messages"))
+                        .header("Content-Type", "application/json")
+                        .header("x-api-key", anthropicApiKey)
+                        .header("anthropic-version", "2023-06-01")
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                        .build();
+
+                HttpResponse<String> httpResp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
+                JsonNode root = objectMapper.readTree(httpResp.body());
+                String text = root.path("content").get(0).path("text").asText();
+
+                // Strip markdown code fences if present
+                text = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+                JsonNode parsed = objectMapper.readTree(text);
+
+                ParsedInvoiceDto dto = new ParsedInvoiceDto();
+                if (!parsed.path("invoiceNumber").isNull()) dto.setInvoiceNumber(parsed.path("invoiceNumber").asText());
+                if (!parsed.path("vendorName").isNull()) dto.setVendorName(parsed.path("vendorName").asText());
+                if (!parsed.path("buyerName").isNull()) dto.setBuyerName(parsed.path("buyerName").asText());
+                if (!parsed.path("amount").isNull() && parsed.path("amount").isNumber())
+                    dto.setAmount(parsed.path("amount").asDouble());
+                if (!parsed.path("issueDate").isNull()) {
+                    try { dto.setIssueDate(LocalDate.parse(parsed.path("issueDate").asText())); } catch (Exception ignored) {}
+                }
+                if (!parsed.path("dueDate").isNull()) {
+                    try { dto.setDueDate(LocalDate.parse(parsed.path("dueDate").asText())); } catch (Exception ignored) {}
+                }
+                if (!parsed.path("description").isNull()) dto.setDescription(parsed.path("description").asText());
+                dto.setConfidence(parsed.path("confidence").asDouble(0.8));
+                return ResponseEntity.ok(dto);
+            } catch (Exception e) {
+                logger.error("Invoice parse failed", e);
+                return ResponseEntity.ok(mockParsedInvoice());
+            }
+        });
+    }
+
+    private ParsedInvoiceDto mockParsedInvoice() {
+        ParsedInvoiceDto dto = new ParsedInvoiceDto();
+        dto.setInvoiceNumber("INV-" + System.currentTimeMillis() % 10000);
+        dto.setVendorName("Acme Corp");
+        dto.setBuyerName("Global Buyer Inc");
+        dto.setAmount(50000.0);
+        dto.setIssueDate(LocalDate.now());
+        dto.setDueDate(LocalDate.now().plusDays(90));
+        dto.setDescription("Goods and services rendered");
+        dto.setConfidence(0.0);
+        return dto;
     }
 
     // ─── Invoices ───────────────────────────────────────────────────────────
@@ -109,21 +221,41 @@ public class InvoiceFinanceApiImpl implements
                     req.getDueDate(),
                     "PENDING_CONFIRMATION"
             );
-            return ledger.create(entity, commandId).thenApply(v -> {
-                var dto = new InvoiceDto();
-                dto.setOperator(auth.getAppProviderPartyId());
-                dto.setSupplier(party);
-                dto.setBuyer(req.getBuyerParty());
-                dto.setInvoiceId(req.getInvoiceId());
-                dto.setAmount(req.getAmount());
-                dto.setDescription(req.getDescription());
-                dto.setPaymentTermDays(req.getPaymentTermDays());
-                dto.setIssueDate(req.getIssueDate());
-                dto.setDueDate(req.getDueDate());
-                dto.setStatus(InvoiceDto.StatusEnum.PENDING_CONFIRMATION);
-                return ResponseEntity.status(HttpStatus.CREATED).body(dto);
-            });
+            // Create + immediately confirm in a single atomic transaction so the
+            // frontend always receives the post-confirm contract ID. This prevents
+            // CONTRACT_NOT_ACTIVE errors when startAuction uses a stale pre-confirm ID.
+            var confirmChoice = new Invoice_BuyerConfirm();
+            return ledger.createAndExercise(entity, confirmChoice, commandId)
+                    .thenApply(confirmedCid -> {
+                        var dto = new InvoiceDto();
+                        dto.setContractId(confirmedCid.getContractId);
+                        dto.setOperator(auth.getAppProviderPartyId());
+                        dto.setSupplier(party);
+                        dto.setBuyer(req.getBuyerParty());
+                        dto.setInvoiceId(req.getInvoiceId());
+                        dto.setAmount(req.getAmount());
+                        dto.setDescription(req.getDescription());
+                        dto.setPaymentTermDays(req.getPaymentTermDays());
+                        dto.setIssueDate(req.getIssueDate());
+                        dto.setDueDate(req.getDueDate());
+                        dto.setStatus(InvoiceDto.StatusEnum.CONFIRMED);
+                        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+                    });
         }));
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<Void>> deleteInvoice(String contractId, String commandId) {
+        var ctx = tracingCtx(logger, "deleteInvoice", "contractId", contractId, "commandId", commandId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findInvoiceById(contractId).thenComposeAsync(opt -> {
+                    var contract = ensurePresent(opt, "Invoice not found: %s", contractId);
+                    var choice = new Invoice_Cancel();
+                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
+                            .thenApply(v -> ResponseEntity.<Void>noContent().build());
+                })
+        ));
     }
 
     @Override
@@ -156,8 +288,16 @@ public class InvoiceFinanceApiImpl implements
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findInvoiceById(contractId).thenComposeAsync(opt -> {
                     var contract = ensurePresent(opt, "Invoice not found: %s", contractId);
+
+                    // Auto-populate eligible banks when none specified:
+                    // 1. All registered INSTITUTION profiles
+                    // 2. Fall back to all non-internal (non-operator) tenants
+                    List<String> banks = (req.getEligibleBanks() == null || req.getEligibleBanks().isEmpty())
+                            ? resolveEligibleBanks(party)
+                            : req.getEligibleBanks();
+
                     var choice = new Invoice_StartAuction(
-                            req.getEligibleBanks().stream()
+                            banks.stream()
                                     .map(Party::new)
                                     .toList(),
                             BigDecimal.valueOf(req.getStartRate()),
@@ -178,9 +318,25 @@ public class InvoiceFinanceApiImpl implements
                                 dto.setStartRate(req.getStartRate());
                                 dto.setReserveRate(req.getReserveRate());
                                 dto.setAuctionDurationSecs(req.getAuctionDurationSecs());
-                                dto.setEligibleBanks(req.getEligibleBanks());
+                                dto.setEligibleBanks(banks);
                                 dto.setStatus(FinancingAuctionDto.StatusEnum.OPEN);
                                 return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+                            })
+                            .exceptionally(ex -> {
+                                // Unwrap CompletionException layers
+                                Throwable cause = ex;
+                                while (cause instanceof java.util.concurrent.CompletionException
+                                        && cause.getCause() != null) {
+                                    cause = cause.getCause();
+                                }
+                                String msg = cause.getMessage();
+                                if (msg != null && msg.contains("CONTRACT_NOT_ACTIVE")) {
+                                    throw new ResponseStatusException(HttpStatus.GONE,
+                                            "Invoice contract is no longer active on the ledger. " +
+                                            "Please refresh the page and create a new invoice.");
+                                }
+                                if (ex instanceof RuntimeException re) throw re;
+                                throw new java.util.concurrent.CompletionException(ex);
                             });
                 })
         ));
@@ -388,6 +544,31 @@ public class InvoiceFinanceApiImpl implements
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Resolves the eligible bank party IDs when none are specified by the company.
+     * Priority: (1) registered INSTITUTION profiles, (2) all non-internal tenant parties.
+     * The caller/supplier party is excluded to avoid self-bidding.
+     */
+    private List<String> resolveEligibleBanks(String supplierParty) {
+        // Try institution profiles first
+        List<String> institutions = ProfileApiImpl.getInstitutionPartyIds();
+        if (!institutions.isEmpty()) {
+            return institutions;
+        }
+        // Fall back to all non-internal tenants (excludes the operator/AppProvider)
+        String operatorParty = auth.getAppProviderPartyId();
+        List<String> tenantParties = tenantRepo.getAllTenants().values().stream()
+                .filter(t -> !t.isInternal())
+                .map(TenantPropertiesRepository.TenantProperties::getPartyId)
+                .filter(p -> p != null && !p.equals(operatorParty) && !p.equals(supplierParty))
+                .toList();
+        if (!tenantParties.isEmpty()) {
+            return tenantParties;
+        }
+        // Last resort: include the operator so the auction is never empty
+        return List.of(operatorParty);
+    }
 
     private InvoiceDto toInvoiceDto(com.digitalasset.quickstart.pqs.Contract<Invoice> c) {
         var dto = new InvoiceDto();

@@ -18,6 +18,8 @@ import type {
     GrabAuctionRequest,
     GrabAuctionResult,
     SprintBoostRequest,
+    ParseInvoiceRequest,
+    ParsedInvoiceDto,
 } from '../openapi.d.ts';
 
 interface InvoiceFinanceState {
@@ -35,11 +37,13 @@ interface InvoiceFinanceContextType extends InvoiceFinanceState {
     fetchAll: () => Promise<void>;
     createInvoice: (req: CreateInvoiceRequest) => Promise<void>;
     confirmInvoice: (contractId: string) => Promise<void>;
+    deleteInvoice: (contractId: string) => Promise<void>;
     startAuction: (contractId: string, req: StartAuctionRequest) => Promise<void>;
     grabAuction: (contractId: string, req: GrabAuctionRequest) => Promise<GrabAuctionResult | void>;
     cancelAuction: (contractId: string) => Promise<void>;
     payFinancedInvoice: (contractId: string) => Promise<void>;
     activateSprintBoost: (contractId: string, req: SprintBoostRequest) => Promise<void>;
+    parseInvoice: (req: ParseInvoiceRequest) => Promise<ParsedInvoiceDto | null>;
 }
 
 const InvoiceFinanceContext = createContext<InvoiceFinanceContextType | undefined>(undefined);
@@ -105,13 +109,30 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
         [fetchAll, toast]
     );
 
+    const deleteInvoice = useCallback(
+        withErrorHandling('Deleting invoice')(async (contractId: string) => {
+            const client: Client = await api.getClient();
+            const commandId = generateCommandId();
+            await client.deleteInvoice({ contractId, commandId });
+            await fetchAll();
+            toast.displaySuccess('Invoice deleted');
+        }),
+        [fetchAll, toast]
+    );
+
     const startAuction = useCallback(
         withErrorHandling('Starting auction')(async (contractId: string, req: StartAuctionRequest) => {
             const client: Client = await api.getClient();
             const commandId = generateCommandId();
-            await client.startAuction({ contractId, commandId }, req);
-            await fetchAll();
-            toast.displaySuccess('Dutch auction started! Banks can now bid.');
+            let succeeded = false;
+            try {
+                await client.startAuction({ contractId, commandId }, req);
+                succeeded = true;
+            } finally {
+                // Always refresh — clears stale/archived contracts from the list on failure too
+                await fetchAll();
+            }
+            if (succeeded) toast.displaySuccess('Dutch auction started! Banks can now bid.');
         }),
         [fetchAll, toast]
     );
@@ -153,6 +174,17 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
         [fetchAll, toast]
     );
 
+    const parseInvoice = useCallback(async (req: ParseInvoiceRequest): Promise<ParsedInvoiceDto | null> => {
+        try {
+            const client: Client = await api.getClient();
+            const result = await client.parseInvoice(null, req);
+            return result.data;
+        } catch (e) {
+            console.error('parseInvoice failed', e);
+            return null;
+        }
+    }, []);
+
     const activateSprintBoost = useCallback(
         withErrorHandling('Activating Sprint Boost')(async (contractId: string, req: SprintBoostRequest) => {
             const client: Client = await api.getClient();
@@ -177,11 +209,13 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
             fetchAll,
             createInvoice,
             confirmInvoice,
+            deleteInvoice,
             startAuction,
             grabAuction,
             cancelAuction,
             payFinancedInvoice,
             activateSprintBoost,
+            parseInvoice,
         }}>
             {children}
         </InvoiceFinanceContext.Provider>

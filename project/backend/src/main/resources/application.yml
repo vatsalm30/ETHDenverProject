@@ -27,6 +27,9 @@ management:
       exposure:
         include: '*'
 
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY:}
+
 ledger:
   application-id: ${AUTH_APP_PROVIDER_BACKEND_USER_ID:AppId}
   registry-base-uri: ${REGISTRY_BASE_URI}

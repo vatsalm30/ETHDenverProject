@@ -18,6 +18,7 @@ import { LicenseProvider } from './stores/licenseStore';
 import { AppInstallProvider } from "./stores/appInstallStore.tsx";
 import { TenantRegistrationProvider } from "./stores/tenantRegistrationStore.tsx";
 import { InvoiceFinanceProvider } from './stores/invoiceFinanceStore';
+import { ProfileProvider } from './stores/profileStore';
 
 const App: React.FC = () => {
     const AppProviders = composeProviders(
@@ -26,7 +27,8 @@ const App: React.FC = () => {
         TenantRegistrationProvider,
         AppInstallProvider,
         LicenseProvider,
-        InvoiceFinanceProvider
+        InvoiceFinanceProvider,
+        ProfileProvider
     );
 
     return (

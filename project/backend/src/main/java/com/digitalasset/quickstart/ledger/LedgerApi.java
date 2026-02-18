@@ -90,6 +90,75 @@ public class LedgerApi {
         });
     }
 
+    /**
+     * Creates a contract and immediately exercises a choice on it in a single atomic transaction.
+     * Returns the exercise result (e.g. a new ContractId from a consuming choice).
+     */
+    @WithSpan
+    public <T extends Template, Result, C extends Choice<T, Result>>
+    CompletableFuture<Result> createAndExercise(
+            T entity,
+            C choice,
+            String commandId
+    ) {
+        var ctx = tracingCtx(logger, "CreateAndExercise",
+                "commandId", commandId,
+                "templateId", entity.templateId().toString(),
+                "choiceName", choice.choiceName()
+        );
+        return trace(ctx, () -> {
+            ValueOuterClass.Value createPayload = dto2Proto.template(entity.templateId()).convert(entity);
+            ValueOuterClass.Value choicePayload =
+                    dto2Proto.choiceArgument(choice.templateId(), choice.choiceName()).convert(choice);
+
+            CommandsOuterClass.Command.Builder cmdBuilder = CommandsOuterClass.Command.newBuilder();
+            cmdBuilder.getCreateAndExerciseBuilder()
+                    .setTemplateId(toIdentifier(entity.templateId()))
+                    .setCreateArguments(createPayload.getRecord())
+                    .setChoice(choice.choiceName())
+                    .setChoiceArgument(choicePayload);
+
+            CommandsOuterClass.Commands commandsMsg = CommandsOuterClass.Commands.newBuilder()
+                    .setCommandId(commandId)
+                    .addActAs(appProviderParty)
+                    .addReadAs(appProviderParty)
+                    .addCommands(cmdBuilder.build())
+                    .build();
+
+            var eventFormat = TransactionFilterOuterClass.EventFormat.newBuilder()
+                    .putFiltersByParty(appProviderParty, TransactionFilterOuterClass.Filters.newBuilder().build())
+                    .build();
+            var transactionFormat = TransactionFilterOuterClass.TransactionFormat.newBuilder()
+                    .setEventFormat(eventFormat)
+                    .setTransactionShape(TransactionFilterOuterClass.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS)
+                    .build();
+
+            CommandServiceOuterClass.SubmitAndWaitForTransactionRequest request =
+                    CommandServiceOuterClass.SubmitAndWaitForTransactionRequest.newBuilder()
+                            .setCommands(commandsMsg)
+                            .setTransactionFormat(transactionFormat)
+                            .build();
+
+            return toCompletableFuture(commands.submitAndWaitForTransaction(request))
+                    .thenApply(response -> {
+                        // Find the exercise event and extract its result
+                        var tx = response.getTransaction();
+                        for (int i = 0; i < tx.getEventsCount(); i++) {
+                            var event = tx.getEvents(i);
+                            if (event.hasExercised()) {
+                                ValueOuterClass.Value resultPayload = event.getExercised().getExerciseResult();
+                                @SuppressWarnings("unchecked")
+                                Result result = (Result) proto2Dto
+                                        .choiceResult(choice.templateId(), choice.choiceName())
+                                        .convert(resultPayload);
+                                return result;
+                            }
+                        }
+                        throw new IllegalStateException("No exercise event found in createAndExercise response");
+                    });
+        });
+    }
+
     @WithSpan
     public <T extends Template, Result, C extends Choice<T, Result>>
     CompletableFuture<Result> exerciseAndGetResult(

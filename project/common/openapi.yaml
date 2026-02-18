@@ -475,6 +475,28 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /invoices/{contractId}:
+    delete:
+      tags: [Invoice Finance]
+      summary: Cancel (delete) an Invoice that has not yet entered auction
+      operationId: deleteInvoice
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Invoice cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /invoices/{contractId}:confirm:
     post:
       tags: [Invoice Finance]
@@ -708,6 +730,110 @@ paths:
                   $ref: '#/components/schemas/PaidInvoiceDto'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── Invoice Parse (AI) ──────────────────────────────────────────────────────
+
+  /invoices/parse:
+    post:
+      tags: [Invoice Finance]
+      summary: Parse invoice from base64-encoded image/PDF using AI
+      operationId: parseInvoice
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseInvoiceRequest'
+      responses:
+        '200':
+          description: Parsed invoice fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedInvoiceDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── User Profiles ────────────────────────────────────────────────────────────
+
+  /profile:
+    get:
+      tags: [Auth]
+      summary: Get current user's profile
+      operationId: getMyProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user's profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Auth]
+      summary: Create or update current user's profile
+      operationId: upsertMyProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /profiles/{partyId}:
+    get:
+      tags: [Auth]
+      summary: Get a user profile by party ID
+      operationId: getProfile
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: partyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1431,6 +1557,91 @@ components:
         bountyPaid:
           type: number
           format: double
+
+    ParseInvoiceRequest:
+      type: object
+      required: [fileBase64, mimeType]
+      properties:
+        fileBase64:
+          type: string
+          description: Base64-encoded file content
+        mimeType:
+          type: string
+          description: MIME type (image/jpeg, image/png, application/pdf)
+
+    ParsedInvoiceDto:
+      type: object
+      properties:
+        invoiceNumber:
+          type: string
+        vendorName:
+          type: string
+        buyerName:
+          type: string
+        amount:
+          type: number
+          format: double
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        description:
+          type: string
+        confidence:
+          type: number
+          format: double
+          description: Confidence score 0-1
+
+    UserProfileDto:
+      type: object
+      properties:
+        partyId:
+          type: string
+        displayName:
+          type: string
+        type:
+          type: string
+          enum: [COMPANY, INSTITUTION]
+        sector:
+          type: string
+          description: Industry sector (e.g. Manufacturing, Technology, Finance)
+        annualRevenue:
+          type: number
+          format: double
+          description: Annual revenue in USD
+        employeeCount:
+          type: integer
+        foundedYear:
+          type: integer
+        description:
+          type: string
+        website:
+          type: string
+
+    UpdateProfileRequest:
+      type: object
+      required: [displayName, type]
+      properties:
+        displayName:
+          type: string
+        type:
+          type: string
+          enum: [COMPANY, INSTITUTION]
+        sector:
+          type: string
+        annualRevenue:
+          type: number
+          format: double
+        employeeCount:
+          type: integer
+        foundedYear:
+          type: integer
+        description:
+          type: string
+        website:
+          type: string
 
     # ── Original Schemas (unchanged) ─────────────────────────────────────────
 

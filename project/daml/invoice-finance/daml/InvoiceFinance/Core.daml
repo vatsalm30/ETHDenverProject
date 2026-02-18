@@ -59,6 +59,14 @@ template Invoice
 
     ensure amount > 0.0
 
+    -- Supplier or operator cancels an invoice that has not yet entered auction.
+    choice Invoice_Cancel : ()
+      controller operator
+      do
+        require "Only PENDING_CONFIRMATION or CONFIRMED invoices can be cancelled"
+          (status == "PENDING_CONFIRMATION" || status == "CONFIRMED")
+        pure ()
+
     -- Buyer confirms goods have been delivered / invoice is valid.
     choice Invoice_BuyerConfirm : ContractId Invoice
       controller operator
@@ -81,7 +89,6 @@ template Invoice
         require "Start rate must be ≤ 100" (startRate <= 100.0)
         require "Reserve rate must be > 0" (reserveRate > 0.0)
         require "At least one eligible bank required" (not (null eligibleBanks))
-        archive self
         create FinancingAuction with
           operator
           supplier
@@ -133,7 +140,6 @@ template FinancingAuction
         require "Offered rate must be ≥ reserve rate" (offeredRate >= reserveRate)
         require "Offered rate must be ≤ start rate"  (offeredRate <= startRate)
         require "Auction must be open" (status == "OPEN")
-        archive self
         -- WinningBid: PRIVATE — losing banks get nothing
         create WinningBid with
           operator
@@ -152,7 +158,6 @@ template FinancingAuction
     choice FinancingAuction_Cancel : ()
       controller operator
       do
-        archive self
         pure ()
 
 -- ---------------------------------------------------------------------------
@@ -186,7 +191,6 @@ template WinningBid
       controller operator
       do
         require "Bid must be pending settlement" (status == "PENDING_SETTLEMENT")
-        archive self
         -- Public FinancedInvoice visible to all three trade parties
         financedId <- create FinancedInvoice with
           operator
@@ -249,7 +253,6 @@ template FinancedInvoice
       do
         require "Must not already be sprint-boosted" (not sprintBoostActive)
         require "Bounty must be positive" (bountyAmount > 0.0)
-        archive self
         create this with
           sprintBoostActive = True
           sprintBoostBounty = bountyAmount
@@ -259,7 +262,6 @@ template FinancedInvoice
     choice FinancedInvoice_Pay : ContractId PaidInvoice
       controller operator
       do
-        archive self
         create PaidInvoice with
           operator
           supplier
@@ -315,14 +317,12 @@ template SprintBoostOffer
       controller operator
       do
         require "Offer must be pending" (offerStatus == "PENDING")
-        archive self
         create this with offerStatus = "ACCEPTED"
 
     choice SprintBoostOffer_Reject : ContractId SprintBoostOffer
       controller operator
       do
         require "Offer must be pending" (offerStatus == "PENDING")
-        archive self
         create this with offerStatus = "REJECTED"
 
 -- ---------------------------------------------------------------------------
