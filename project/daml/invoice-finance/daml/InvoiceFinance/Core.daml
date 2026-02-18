@@ -1,0 +1,345 @@
+-- Copyright (c) 2026 ETHDenver Hackathon. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- | Deadline Derby: Confidential Invoice Financing on Canton Network
+--
+-- Privacy Model:
+--   * Suppliers create invoices; buyers confirm them.
+--   * The platform (operator) co-signs every contract, enabling the backend
+--     to submit on behalf of all roles using a single service account.
+--   * During the Dutch auction ALL eligible banks are observers — they see
+--     the auction parameters but NOT the winning bid details.
+--   * WinningBid is ONLY visible to operator + winning bank.
+--     Losing banks are completely blind: they never learn who won or at what rate.
+--   * FinancedInvoice is visible to all three trade parties (supplier/buyer/bank)
+--     but it deliberately does NOT contain the purchase rate.
+--   * BankOwnership carries the confidential purchase rate and is only
+--     visible to operator + winning bank — the buyer is excluded.
+--   * SprintBoostOffer is negotiated privately between buyer and bank.
+--     The supplier is NOT a party (they already received their cash).
+--   * PaidInvoice is the final archive record visible to all three parties.
+--
+-- Canton Global Synchronizer guarantees that non-observer nodes never receive
+-- the payload of a contract.  Only cryptographic commitment hashes are shared.
+
+module InvoiceFinance.Core where
+
+import DA.Date
+import DA.Time
+import DA.List (elem)
+
+-- ---------------------------------------------------------------------------
+-- Helper
+-- ---------------------------------------------------------------------------
+
+require : Text -> Bool -> Update ()
+require msg cond = if cond then pure () else error msg
+
+-- ---------------------------------------------------------------------------
+-- Invoice  (signatory: operator + supplier   observer: buyer)
+-- ---------------------------------------------------------------------------
+-- Created by the supplier.  The buyer can confirm delivery.
+-- Banks have ZERO visibility at this stage.
+
+template Invoice
+  with
+    operator  : Party   -- ^ Platform / AppProvider co-signer
+    supplier  : Party   -- ^ Creates the invoice
+    buyer     : Party   -- ^ Will pay the invoice at maturity
+    invoiceId : Text    -- ^ Business-level unique ID (e.g. "INV-2025-0001")
+    amount    : Decimal -- ^ Face value in USD
+    description     : Text -- ^ Goods / services description
+    paymentTermDays : Int  -- ^ e.g. 90
+    issueDate       : Date
+    dueDate         : Date
+    status    : Text   -- ^ "PENDING_CONFIRMATION" | "CONFIRMED" | "IN_AUCTION" | "FINANCED" | "PAID"
+  where
+    signatory operator, supplier
+    observer  buyer
+
+    ensure amount > 0.0
+
+    -- Buyer confirms goods have been delivered / invoice is valid.
+    choice Invoice_BuyerConfirm : ContractId Invoice
+      controller operator
+      do
+        require "Invoice must be pending confirmation" (status == "PENDING_CONFIRMATION")
+        create this with status = "CONFIRMED"
+
+    -- Supplier kicks off a Dutch auction for the confirmed invoice.
+    -- After this choice the Invoice contract is archived; the auction is live.
+    choice Invoice_StartAuction : ContractId FinancingAuction
+      with
+        eligibleBanks         : [Party]
+        startRate             : Decimal -- ^ Starting advance rate e.g. 98.0 (= 98 %)
+        reserveRate           : Decimal -- ^ Floor rate e.g. 95.0 (= 95 %)
+        auctionDurationSecs   : Int     -- ^ Wall-clock seconds (e.g. 60)
+      controller operator
+      do
+        require "Invoice must be confirmed before auction" (status == "CONFIRMED")
+        require "Start rate must exceed reserve rate" (startRate > reserveRate)
+        require "Start rate must be ≤ 100" (startRate <= 100.0)
+        require "Reserve rate must be > 0" (reserveRate > 0.0)
+        require "At least one eligible bank required" (not (null eligibleBanks))
+        archive self
+        create FinancingAuction with
+          operator
+          supplier
+          buyer
+          invoiceId
+          amount
+          description
+          dueDate
+          startRate
+          reserveRate
+          auctionDurationSecs
+          eligibleBanks
+          status = "OPEN"
+
+-- ---------------------------------------------------------------------------
+-- FinancingAuction  (signatory: operator   observer: eligibleBanks)
+-- ---------------------------------------------------------------------------
+-- All eligible banks can see the auction and submit bids.
+-- The BUYER is NOT an observer — they don't see competitive pricing.
+-- Losing banks will see this contract archived but will NOT see WinningBid.
+
+template FinancingAuction
+  with
+    operator            : Party
+    supplier            : Party
+    buyer               : Party
+    invoiceId           : Text
+    amount              : Decimal
+    description         : Text
+    dueDate             : Date
+    startRate           : Decimal -- ^ Auction opens here (highest %)
+    reserveRate         : Decimal -- ^ Auction must not go below this
+    auctionDurationSecs : Int
+    eligibleBanks       : [Party]
+    status              : Text    -- ^ "OPEN" | "CLOSED"
+  where
+    signatory operator
+    observer  eligibleBanks   -- Banks watch the auction — buyer is excluded
+
+    -- A bank grabs the invoice at the current (falling) price.
+    -- Immediately creates a PRIVATE WinningBid and archives this contract.
+    choice FinancingAuction_BankGrab : ContractId WinningBid
+      with
+        bank         : Party
+        offeredRate  : Decimal -- ^ The rate the bank accepts (e.g. 97.6)
+      controller operator
+      do
+        require "Bidding bank must be eligible" (bank `elem` eligibleBanks)
+        require "Offered rate must be ≥ reserve rate" (offeredRate >= reserveRate)
+        require "Offered rate must be ≤ start rate"  (offeredRate <= startRate)
+        require "Auction must be open" (status == "OPEN")
+        archive self
+        -- WinningBid: PRIVATE — losing banks get nothing
+        create WinningBid with
+          operator
+          supplier
+          buyer
+          bank
+          invoiceId
+          amount
+          description
+          dueDate
+          purchaseRate   = offeredRate
+          purchaseAmount = amount * offeredRate / 100.0
+          status = "PENDING_SETTLEMENT"
+
+    -- Auction can be cancelled (e.g. no bids before expiry).
+    choice FinancingAuction_Cancel : ()
+      controller operator
+      do
+        archive self
+        pure ()
+
+-- ---------------------------------------------------------------------------
+-- WinningBid  (signatory: operator   observer: bank)
+-- ---------------------------------------------------------------------------
+-- *** PRIVACY CRITICAL ***
+-- Only the operator and the WINNING bank can see this contract.
+-- Losing banks are NOT observers and never learn who won or at what rate.
+-- The buyer is also excluded — they don't know the bank's margin.
+
+template WinningBid
+  with
+    operator       : Party
+    supplier       : Party  -- ^ Needed for settlement
+    buyer          : Party  -- ^ Needed for downstream FinancedInvoice
+    bank           : Party  -- ^ The winning bank
+    invoiceId      : Text
+    amount         : Decimal   -- ^ Face value
+    description    : Text
+    dueDate        : Date
+    purchaseRate   : Decimal   -- ^ What % bank pays (e.g. 97.6)
+    purchaseAmount : Decimal   -- ^ Actual cash bank transfers to supplier
+    status         : Text      -- ^ "PENDING_SETTLEMENT" | "SETTLED"
+  where
+    signatory operator
+    observer  bank           -- *** buyer is NOT here — purchase price stays private
+
+    -- Settle: transfer purchaseAmount to supplier, create public FinancedInvoice
+    -- and private BankOwnership (with the purchase price).
+    choice WinningBid_Settle : FinancedInvoiceResult
+      controller operator
+      do
+        require "Bid must be pending settlement" (status == "PENDING_SETTLEMENT")
+        archive self
+        -- Public FinancedInvoice visible to all three trade parties
+        financedId <- create FinancedInvoice with
+          operator
+          supplier
+          buyer
+          bank
+          invoiceId
+          amount          -- face value (what buyer owes) — NOT the purchase price
+          description
+          dueDate
+          paymentStatus     = "ACTIVE"
+          sprintBoostActive = False
+          sprintBoostBounty = 0.0
+        -- Private BankOwnership: purchase price only for operator + bank
+        ownershipId <- create BankOwnership with
+          operator
+          bank
+          invoiceId
+          purchaseRate
+          purchaseAmount
+          faceValue = amount
+        pure FinancedInvoiceResult with
+          financedInvoiceId = financedId
+          bankOwnershipId   = ownershipId
+
+data FinancedInvoiceResult = FinancedInvoiceResult with
+    financedInvoiceId : ContractId FinancedInvoice
+    bankOwnershipId   : ContractId BankOwnership
+  deriving (Show, Eq)
+
+-- ---------------------------------------------------------------------------
+-- FinancedInvoice  (signatory: operator, supplier, buyer, bank)
+-- ---------------------------------------------------------------------------
+-- The "horse" racing to the finish line.
+-- All three trade parties are signatories — they all see this contract.
+-- IMPORTANT: purchaseRate / purchaseAmount are NOT stored here.
+-- The buyer sees how much THEY owe but not what the bank paid.
+
+template FinancedInvoice
+  with
+    operator          : Party
+    supplier          : Party
+    buyer             : Party
+    bank              : Party
+    invoiceId         : Text
+    amount            : Decimal -- ^ Face value (what buyer owes at maturity)
+    description       : Text
+    dueDate           : Date
+    paymentStatus     : Text    -- ^ "ACTIVE" | "SPRINT_BOOST_ACTIVE" | "PAID"
+    sprintBoostActive : Bool
+    sprintBoostBounty : Decimal -- ^ Extra bounty buyer earns for early payment
+  where
+    signatory operator, supplier, buyer, bank
+
+    -- Buyer activates Sprint Boost: offers to pay early in exchange for a bounty.
+    choice FinancedInvoice_ActivateSprintBoost : ContractId FinancedInvoice
+      with
+        bountyAmount : Decimal
+      controller operator
+      do
+        require "Must not already be sprint-boosted" (not sprintBoostActive)
+        require "Bounty must be positive" (bountyAmount > 0.0)
+        archive self
+        create this with
+          sprintBoostActive = True
+          sprintBoostBounty = bountyAmount
+          paymentStatus     = "SPRINT_BOOST_ACTIVE"
+
+    -- Buyer pays the invoice (at or before maturity).
+    choice FinancedInvoice_Pay : ContractId PaidInvoice
+      controller operator
+      do
+        archive self
+        create PaidInvoice with
+          operator
+          supplier
+          buyer
+          bank
+          invoiceId
+          amount
+          description
+          sprintBoosted = sprintBoostActive
+          bountyPaid    = if sprintBoostActive then sprintBoostBounty else 0.0
+
+-- ---------------------------------------------------------------------------
+-- BankOwnership  (signatory: operator   observer: bank)
+-- ---------------------------------------------------------------------------
+-- *** PRIVACY CRITICAL ***
+-- Contains the confidential purchase rate and purchase amount.
+-- The BUYER is NOT an observer — they never see the bank's margin.
+-- Losing banks are also excluded.
+
+template BankOwnership
+  with
+    operator       : Party
+    bank           : Party  -- ^ Winning bank only
+    invoiceId      : Text
+    purchaseRate   : Decimal  -- ^ e.g. 97.6 (%)
+    purchaseAmount : Decimal  -- ^ e.g. $97,600
+    faceValue      : Decimal  -- ^ $100,000
+  where
+    signatory operator
+    observer  bank   -- *** buyer excluded — bank's margin stays confidential
+
+-- ---------------------------------------------------------------------------
+-- SprintBoostOffer  (signatory: operator   observer: buyer, bank)
+-- ---------------------------------------------------------------------------
+-- The buyer proposes early payment; the bank can accept.
+-- The SUPPLIER is NOT a party here — they already received their cash.
+-- This is a private negotiation between buyer and bank.
+
+template SprintBoostOffer
+  with
+    operator         : Party
+    buyer            : Party
+    bank             : Party
+    invoiceId        : Text
+    earlyPaymentDate : Date
+    bountyAmount     : Decimal
+    offerStatus      : Text    -- ^ "PENDING" | "ACCEPTED" | "REJECTED"
+  where
+    signatory operator
+    observer  buyer, bank   -- supplier is NOT here
+
+    choice SprintBoostOffer_Accept : ContractId SprintBoostOffer
+      controller operator
+      do
+        require "Offer must be pending" (offerStatus == "PENDING")
+        archive self
+        create this with offerStatus = "ACCEPTED"
+
+    choice SprintBoostOffer_Reject : ContractId SprintBoostOffer
+      controller operator
+      do
+        require "Offer must be pending" (offerStatus == "PENDING")
+        archive self
+        create this with offerStatus = "REJECTED"
+
+-- ---------------------------------------------------------------------------
+-- PaidInvoice  (signatory: operator, supplier, buyer, bank)
+-- ---------------------------------------------------------------------------
+-- Final immutable record.  All three trade parties see this.
+
+template PaidInvoice
+  with
+    operator      : Party
+    supplier      : Party
+    buyer         : Party
+    bank          : Party
+    invoiceId     : Text
+    amount        : Decimal
+    description   : Text
+    sprintBoosted : Bool
+    bountyPaid    : Decimal
+  where
+    signatory operator, supplier, buyer, bank

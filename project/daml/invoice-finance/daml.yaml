@@ -1,0 +1,10 @@
+sdk-version: 3.4.10
+name: quickstart-invoice-finance
+source: daml
+version: 0.0.1
+dependencies:
+  - daml-prim
+  - daml-stdlib
+build-options:
+  - --ghc-option=-Wunused-binds
+  - --ghc-option=-Wunused-matches

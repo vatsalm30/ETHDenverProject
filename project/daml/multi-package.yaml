@@ -5,3 +5,4 @@ packages:
 - ./external-test-sources/splice-wallet-test
 - ./licensing
 - ./licensing-tests
+- ./invoice-finance

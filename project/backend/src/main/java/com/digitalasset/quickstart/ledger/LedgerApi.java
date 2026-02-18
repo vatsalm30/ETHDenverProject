@@ -100,6 +100,109 @@ public class LedgerApi {
         return exerciseAndGetResult(contractId, choice, commandId, List.of());
     }
 
+    /**
+     * Submit a create command acting as an additional party alongside the operator.
+     * Used by invoice-finance flows where the supplier/buyer/bank must co-act.
+     */
+    @WithSpan
+    public <T extends Template> CompletableFuture<Void> createAsParties(
+            T entity,
+            String commandId,
+            List<String> actAsParties
+    ) {
+        var ctx = tracingCtx(logger, "Creating contract (multi-party)",
+                "commandId", commandId,
+                "templateId", entity.templateId().toString()
+        );
+        return traceWithStartEvent(ctx, () -> {
+            CommandsOuterClass.Command.Builder command = CommandsOuterClass.Command.newBuilder();
+            ValueOuterClass.Value payload = dto2Proto.template(entity.templateId()).convert(entity);
+            command.getCreateBuilder()
+                    .setTemplateId(toIdentifier(entity.templateId()))
+                    .setCreateArguments(payload.getRecord());
+
+            CommandsOuterClass.Commands.Builder commandsBuilder = CommandsOuterClass.Commands.newBuilder()
+                    .setCommandId(commandId)
+                    .addActAs(appProviderParty)
+                    .addReadAs(appProviderParty)
+                    .addCommands(command.build());
+            for (String p : actAsParties) {
+                commandsBuilder.addActAs(p);
+            }
+            CommandSubmissionServiceOuterClass.SubmitRequest request =
+                    CommandSubmissionServiceOuterClass.SubmitRequest.newBuilder()
+                            .setCommands(commandsBuilder.build())
+                            .build();
+            return toCompletableFuture(submission.submit(request)).thenApply(r -> null);
+        });
+    }
+
+    /**
+     * Exercise a choice acting as additional parties alongside the operator.
+     */
+    @WithSpan
+    public <T extends Template, Result, C extends Choice<T, Result>>
+    CompletableFuture<Result> exerciseAsParties(
+            ContractId<T> contractId,
+            C choice,
+            String commandId,
+            List<String> actAsParties
+    ) {
+        var ctx = tracingCtx(logger, "Exercising choice (multi-party)",
+                "commandId", commandId,
+                "contractId", contractId.getContractId,
+                "choiceName", choice.choiceName()
+        );
+        return trace(ctx, () -> {
+            CommandsOuterClass.Command.Builder cmdBuilder = CommandsOuterClass.Command.newBuilder();
+            ValueOuterClass.Value payload =
+                    dto2Proto.choiceArgument(choice.templateId(), choice.choiceName()).convert(choice);
+
+            cmdBuilder.getExerciseBuilder()
+                    .setTemplateId(toIdentifier(choice.templateId()))
+                    .setContractId(contractId.getContractId)
+                    .setChoice(choice.choiceName())
+                    .setChoiceArgument(payload);
+
+            CommandsOuterClass.Commands.Builder commandsBuilder = CommandsOuterClass.Commands.newBuilder()
+                    .setCommandId(commandId)
+                    .addActAs(appProviderParty)
+                    .addReadAs(appProviderParty)
+                    .addCommands(cmdBuilder.build());
+            for (String p : actAsParties) {
+                commandsBuilder.addActAs(p);
+            }
+
+            var eventFormat = TransactionFilterOuterClass.EventFormat.newBuilder()
+                    .putFiltersByParty(appProviderParty, TransactionFilterOuterClass.Filters.newBuilder().build())
+                    .build();
+            var transactionShape = TransactionFilterOuterClass.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS;
+            var transactionFormat =
+                    TransactionFilterOuterClass.TransactionFormat.newBuilder()
+                            .setEventFormat(eventFormat)
+                            .setTransactionShape(transactionShape)
+                            .build();
+            CommandServiceOuterClass.SubmitAndWaitForTransactionRequest request =
+                    CommandServiceOuterClass.SubmitAndWaitForTransactionRequest.newBuilder()
+                            .setCommands(commandsBuilder.build())
+                            .setTransactionFormat(transactionFormat)
+                            .build();
+
+            return toCompletableFuture(commands.submitAndWaitForTransaction(request))
+                    .thenApply(response -> {
+                        TransactionOuterClass.Transaction tx = response.getTransaction();
+                        int eventCount = tx.getEventsCount();
+                        EventOuterClass.Event event = eventCount != 0 ? tx.getEvents(0) : null;
+                        ValueOuterClass.Value resultPayload = event != null
+                                ? event.getExercised().getExerciseResult()
+                                : ValueOuterClass.Value.getDefaultInstance();
+                        @SuppressWarnings("unchecked")
+                        Result result = (Result) proto2Dto.choiceResult(choice.templateId(), choice.choiceName()).convert(resultPayload);
+                        return result;
+                    });
+        });
+    }
+
     @WithSpan
     public <T extends Template, Result, C extends Choice<T, Result>>
     CompletableFuture<Result> exerciseAndGetResult(

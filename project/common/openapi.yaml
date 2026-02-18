@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Backend API
-  description: API to manage AppInstalls, Licenses and Tenant Registrations
+  description: API to manage AppInstalls, Licenses, Tenant Registrations, and Invoice Financing (Deadline Derby)
   version: 1.0.0
 
 tags:
@@ -12,6 +12,10 @@ tags:
   - name: App Installs Requests
   - name: Licenses
   - name: licenses Renewal Requests
+  - name: Invoice Finance
+  - name: Financing Auctions
+  - name: Financed Invoices
+  - name: Sprint Boost
 
 paths:
   /feature-flags:
@@ -423,6 +427,290 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # DEADLINE DERBY — Invoice Finance Endpoints
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /invoices:
+    get:
+      tags: [Invoice Finance]
+      summary: List all Invoices visible to the authenticated party
+      operationId: listInvoices
+      responses:
+        '200':
+          description: A list of Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Invoice Finance]
+      summary: Supplier creates a new Invoice
+      operationId: createInvoice
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+      responses:
+        '201':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /invoices/{contractId}:confirm:
+    post:
+      tags: [Invoice Finance]
+      summary: Buyer confirms an Invoice (goods delivered)
+      operationId: confirmInvoice
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Invoice confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /invoices/{contractId}:start-auction:
+    post:
+      tags: [Invoice Finance]
+      summary: Supplier starts a Dutch auction for a confirmed Invoice
+      operationId: startAuction
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartAuctionRequest'
+      responses:
+        '201':
+          description: Auction started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancingAuctionDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions:
+    get:
+      tags: [Financing Auctions]
+      summary: List all Auctions visible to the authenticated party
+      operationId: listAuctions
+      responses:
+        '200':
+          description: A list of Financing Auctions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FinancingAuctionDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions/{contractId}:grab:
+    post:
+      tags: [Financing Auctions]
+      summary: Bank grabs an Invoice from the auction at the current rate
+      operationId: grabAuction
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrabAuctionRequest'
+      responses:
+        '201':
+          description: Bid placed — winning bid and financed invoice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrabAuctionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions/{contractId}:cancel:
+    post:
+      tags: [Financing Auctions]
+      summary: Cancel an open Auction (operator / supplier action)
+      operationId: cancelAuction
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Auction cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /financed-invoices:
+    get:
+      tags: [Financed Invoices]
+      summary: List all Financed Invoices visible to the authenticated party
+      operationId: listFinancedInvoices
+      responses:
+        '200':
+          description: A list of Financed Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FinancedInvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /financed-invoices/{contractId}:pay:
+    post:
+      tags: [Financed Invoices]
+      summary: Buyer pays a Financed Invoice at maturity
+      operationId: payFinancedInvoice
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Invoice paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaidInvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /financed-invoices/{contractId}:sprint-boost:
+    post:
+      tags: [Sprint Boost]
+      summary: Buyer activates Sprint Boost (offers early payment in exchange for a bounty)
+      operationId: activateSprintBoost
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintBoostRequest'
+      responses:
+        '200':
+          description: Sprint Boost activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancedInvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bank-ownerships:
+    get:
+      tags: [Financed Invoices]
+      summary: List BankOwnership contracts — shows purchase rate (bank + operator only)
+      operationId: listBankOwnerships
+      responses:
+        '200':
+          description: A list of BankOwnership contracts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankOwnershipDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /paid-invoices:
+    get:
+      tags: [Financed Invoices]
+      summary: List all Paid Invoices visible to the authenticated party
+      operationId: listPaidInvoices
+      responses:
+        '200':
+          description: A list of Paid Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaidInvoiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     ContractId:
@@ -827,6 +1115,324 @@ components:
           enum:
             - oauth2
             - shared-secret
+
+    # ── Deadline Derby Schemas ──────────────────────────────────────────────
+
+    CreateInvoiceRequest:
+      type: object
+      required:
+        - invoiceId
+        - buyerParty
+        - amount
+        - description
+        - paymentTermDays
+        - issueDate
+        - dueDate
+      properties:
+        invoiceId:
+          type: string
+          example: "INV-2025-0001"
+        buyerParty:
+          type: string
+          description: Canton party ID of the buyer
+        amount:
+          type: number
+          format: double
+          example: 100000.00
+        description:
+          type: string
+          example: "10,000 steel bolts"
+        paymentTermDays:
+          type: integer
+          example: 90
+        issueDate:
+          type: string
+          format: date
+          example: "2025-01-01"
+        dueDate:
+          type: string
+          format: date
+          example: "2025-04-01"
+
+    InvoiceDto:
+      type: object
+      required:
+        - contractId
+        - operator
+        - supplier
+        - buyer
+        - invoiceId
+        - amount
+        - description
+        - paymentTermDays
+        - issueDate
+        - dueDate
+        - status
+      properties:
+        contractId:
+          type: string
+        operator:
+          type: string
+        supplier:
+          type: string
+        buyer:
+          type: string
+        invoiceId:
+          type: string
+        amount:
+          type: number
+          format: double
+        description:
+          type: string
+        paymentTermDays:
+          type: integer
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [PENDING_CONFIRMATION, CONFIRMED, IN_AUCTION, FINANCED, PAID]
+
+    StartAuctionRequest:
+      type: object
+      required:
+        - eligibleBanks
+        - startRate
+        - reserveRate
+        - auctionDurationSecs
+      properties:
+        eligibleBanks:
+          type: array
+          items:
+            type: string
+          description: Canton party IDs of eligible banks
+        startRate:
+          type: number
+          format: double
+          description: Starting advance rate (e.g. 98.0 = 98%)
+          example: 98.0
+        reserveRate:
+          type: number
+          format: double
+          description: Minimum advance rate (floor)
+          example: 95.0
+        auctionDurationSecs:
+          type: integer
+          description: Duration of Dutch auction in seconds
+          example: 60
+
+    FinancingAuctionDto:
+      type: object
+      required:
+        - contractId
+        - operator
+        - supplier
+        - buyer
+        - invoiceId
+        - amount
+        - description
+        - dueDate
+        - startRate
+        - reserveRate
+        - auctionDurationSecs
+        - eligibleBanks
+        - status
+      properties:
+        contractId:
+          type: string
+        operator:
+          type: string
+        supplier:
+          type: string
+        buyer:
+          type: string
+        invoiceId:
+          type: string
+        amount:
+          type: number
+          format: double
+        description:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        startRate:
+          type: number
+          format: double
+        reserveRate:
+          type: number
+          format: double
+        auctionDurationSecs:
+          type: integer
+        eligibleBanks:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [OPEN, CLOSED]
+
+    GrabAuctionRequest:
+      type: object
+      required:
+        - bankParty
+        - offeredRate
+      properties:
+        bankParty:
+          type: string
+          description: Canton party ID of the bidding bank
+        offeredRate:
+          type: number
+          format: double
+          description: The advance rate the bank accepts (e.g. 97.6)
+          example: 97.6
+
+    GrabAuctionResult:
+      type: object
+      properties:
+        winningBidContractId:
+          type: string
+        financedInvoiceContractId:
+          type: string
+        bankOwnershipContractId:
+          type: string
+        purchaseRate:
+          type: number
+          format: double
+        purchaseAmount:
+          type: number
+          format: double
+
+    FinancedInvoiceDto:
+      type: object
+      required:
+        - contractId
+        - operator
+        - supplier
+        - buyer
+        - bank
+        - invoiceId
+        - amount
+        - description
+        - dueDate
+        - paymentStatus
+        - sprintBoostActive
+        - sprintBoostBounty
+      properties:
+        contractId:
+          type: string
+        operator:
+          type: string
+        supplier:
+          type: string
+        buyer:
+          type: string
+        bank:
+          type: string
+        invoiceId:
+          type: string
+        amount:
+          type: number
+          format: double
+          description: Face value — what the buyer owes (NOT the bank's purchase price)
+        description:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        paymentStatus:
+          type: string
+          enum: [ACTIVE, SPRINT_BOOST_ACTIVE, PAID]
+        sprintBoostActive:
+          type: boolean
+        sprintBoostBounty:
+          type: number
+          format: double
+
+    SprintBoostRequest:
+      type: object
+      required:
+        - bountyAmount
+      properties:
+        bountyAmount:
+          type: number
+          format: double
+          description: Bounty amount the buyer receives for early payment
+          example: 400.00
+
+    BankOwnershipDto:
+      type: object
+      required:
+        - contractId
+        - operator
+        - bank
+        - invoiceId
+        - purchaseRate
+        - purchaseAmount
+        - faceValue
+      properties:
+        contractId:
+          type: string
+        operator:
+          type: string
+        bank:
+          type: string
+        invoiceId:
+          type: string
+        purchaseRate:
+          type: number
+          format: double
+          description: Confidential — advance rate the bank paid (e.g. 97.6%)
+        purchaseAmount:
+          type: number
+          format: double
+          description: Confidential — actual cash bank transferred to supplier
+        faceValue:
+          type: number
+          format: double
+          description: Invoice face value (what buyer owes)
+
+    PaidInvoiceDto:
+      type: object
+      required:
+        - contractId
+        - operator
+        - supplier
+        - buyer
+        - bank
+        - invoiceId
+        - amount
+        - description
+        - sprintBoosted
+        - bountyPaid
+      properties:
+        contractId:
+          type: string
+        operator:
+          type: string
+        supplier:
+          type: string
+        buyer:
+          type: string
+        bank:
+          type: string
+        invoiceId:
+          type: string
+        amount:
+          type: number
+          format: double
+        description:
+          type: string
+        sprintBoosted:
+          type: boolean
+        bountyPaid:
+          type: number
+          format: double
+
+    # ── Original Schemas (unchanged) ─────────────────────────────────────────
 
     ErrorResponse:
       type: object

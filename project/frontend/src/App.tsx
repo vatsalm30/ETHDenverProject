@@ -13,9 +13,11 @@ import Header from './components/Header';
 import ToastNotification from './components/ToastNotification';
 import AppInstallsView from "./views/AppInstallsView.tsx";
 import LicensesView from './views/LicensesView';
+import DeadlineDerbyView from './views/DeadlineDerbyView';
 import { LicenseProvider } from './stores/licenseStore';
 import { AppInstallProvider } from "./stores/appInstallStore.tsx";
 import { TenantRegistrationProvider } from "./stores/tenantRegistrationStore.tsx";
+import { InvoiceFinanceProvider } from './stores/invoiceFinanceStore';
 
 const App: React.FC = () => {
     const AppProviders = composeProviders(
@@ -23,7 +25,8 @@ const App: React.FC = () => {
         UserProvider,
         TenantRegistrationProvider,
         AppInstallProvider,
-        LicenseProvider
+        LicenseProvider,
+        InvoiceFinanceProvider
     );
 
     return (
@@ -36,6 +39,7 @@ const App: React.FC = () => {
                     <Route path="/login" element={<LoginView />} />
                     <Route path="/app-installs" element={<AppInstallsView />} />
                     <Route path="/licenses" element={<LicensesView />} />
+                    <Route path="/deadline-derby" element={<DeadlineDerbyView />} />
                 </Routes>
             </main>
             <ToastNotification />

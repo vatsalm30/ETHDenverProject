@@ -23,6 +23,14 @@ import quickstart_licensing.licensing.license.LicenseRenewalRequest;
 import splice_api_token_allocation_request_v1.splice.api.token.allocationrequestv1.AllocationRequest;
 import splice_api_token_allocation_v1.splice.api.token.allocationv1.Allocation;
 
+// Invoice Finance (Deadline Derby) imports — generated after `./gradlew :daml:codeGen`
+import quickstart_invoice_finance.invoicefinance.core.Invoice;
+import quickstart_invoice_finance.invoicefinance.core.FinancingAuction;
+import quickstart_invoice_finance.invoicefinance.core.WinningBid;
+import quickstart_invoice_finance.invoicefinance.core.FinancedInvoice;
+import quickstart_invoice_finance.invoicefinance.core.BankOwnership;
+import quickstart_invoice_finance.invoicefinance.core.PaidInvoice;
+
 /**
  * Repository for accessing active Daml contracts via PQS.
  */
@@ -155,5 +163,65 @@ public class DamlRepository {
      */
     public CompletableFuture<List<Contract<AppInstallRequest>>> findActiveAppInstallRequests() {
         return pqs.active(AppInstallRequest.class);
+    }
+
+    // ─── Deadline Derby — Invoice Finance ────────────────────────────────────
+
+    /** All Invoices where the given party is supplier, buyer, or operator. */
+    public CompletableFuture<List<Contract<Invoice>>> findActiveInvoices(String party) {
+        return pqs.activeWhere(Invoice.class,
+                "payload->>'supplier' = ? OR payload->>'buyer' = ? OR payload->>'operator' = ?",
+                party, party, party);
+    }
+
+    public CompletableFuture<Optional<Contract<Invoice>>> findInvoiceById(String contractId) {
+        return pqs.contractByContractId(Invoice.class, contractId);
+    }
+
+    /** All open Auctions where the given party is in the eligibleBanks list or is the operator. */
+    public CompletableFuture<List<Contract<FinancingAuction>>> findActiveAuctions(String party) {
+        return pqs.activeWhere(FinancingAuction.class,
+                "payload->>'operator' = ? OR payload->'eligibleBanks' @> to_jsonb(?::text)",
+                party, party);
+    }
+
+    public CompletableFuture<Optional<Contract<FinancingAuction>>> findAuctionById(String contractId) {
+        return pqs.contractByContractId(FinancingAuction.class, contractId);
+    }
+
+    /** All WinningBids where the given party is the bank or operator (losers see nothing). */
+    public CompletableFuture<List<Contract<WinningBid>>> findActiveWinningBids(String party) {
+        return pqs.activeWhere(WinningBid.class,
+                "payload->>'bank' = ? OR payload->>'operator' = ?",
+                party, party);
+    }
+
+    public CompletableFuture<Optional<Contract<WinningBid>>> findWinningBidById(String contractId) {
+        return pqs.contractByContractId(WinningBid.class, contractId);
+    }
+
+    /** All FinancedInvoices where the given party is supplier, buyer, bank, or operator. */
+    public CompletableFuture<List<Contract<FinancedInvoice>>> findActiveFinancedInvoices(String party) {
+        return pqs.activeWhere(FinancedInvoice.class,
+                "payload->>'supplier' = ? OR payload->>'buyer' = ? OR payload->>'bank' = ? OR payload->>'operator' = ?",
+                party, party, party, party);
+    }
+
+    public CompletableFuture<Optional<Contract<FinancedInvoice>>> findFinancedInvoiceById(String contractId) {
+        return pqs.contractByContractId(FinancedInvoice.class, contractId);
+    }
+
+    /** BankOwnership — only bank and operator can query these (buyer excluded). */
+    public CompletableFuture<List<Contract<BankOwnership>>> findActiveBankOwnerships(String party) {
+        return pqs.activeWhere(BankOwnership.class,
+                "payload->>'bank' = ? OR payload->>'operator' = ?",
+                party, party);
+    }
+
+    /** Paid Invoices visible to the party. */
+    public CompletableFuture<List<Contract<PaidInvoice>>> findPaidInvoices(String party) {
+        return pqs.activeWhere(PaidInvoice.class,
+                "payload->>'supplier' = ? OR payload->>'buyer' = ? OR payload->>'bank' = ? OR payload->>'operator' = ?",
+                party, party, party, party);
     }
 }

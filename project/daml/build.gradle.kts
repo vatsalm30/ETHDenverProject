@@ -34,6 +34,7 @@ tasks.register<Exec>("testDaml") {
 
 tasks.register<com.digitalasset.transcode.codegen.java.gradle.JavaCodegenTask>("codeGen") {
     dar.from("$projectDir/licensing/.daml/dist/quickstart-licensing-0.0.1.dar")
+    dar.from("$projectDir/invoice-finance/.daml/dist/quickstart-invoice-finance-0.0.1.dar")
     destination = file("$rootDir/backend/build/generated-daml-bindings")
     dependsOn("compileDaml")
 }
