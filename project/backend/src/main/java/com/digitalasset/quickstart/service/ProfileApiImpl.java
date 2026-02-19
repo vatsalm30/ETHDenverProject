@@ -11,6 +11,7 @@ import org.openapitools.model.UserProfileDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -34,18 +35,41 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
         this.auth = auth;
     }
 
-    /** Returns the party IDs of all registered INSTITUTION profiles. */
+    /** Returns the username of the currently authenticated user, or null if unauthenticated. */
+    private static String currentUserKey() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null) ? auth.getName() : null;
+    }
+
+    /** Returns the party IDs of all registered INSTITUTION profiles (distinct). */
     public static List<String> getInstitutionPartyIds() {
-        return profiles.entrySet().stream()
-                .filter(e -> UserProfileDto.TypeEnum.INSTITUTION.equals(e.getValue().getType()))
-                .map(java.util.Map.Entry::getKey)
+        return profiles.values().stream()
+                .filter(p -> UserProfileDto.TypeEnum.INSTITUTION.equals(p.getType()))
+                .map(UserProfileDto::getPartyId)
+                .filter(id -> id != null)
+                .distinct()
                 .toList();
+    }
+
+    /** Returns the display name for a party, or the party ID if no profile is registered. */
+    public static String getDisplayName(String partyId) {
+        return profiles.values().stream()
+                .filter(p -> partyId.equals(p.getPartyId()))
+                .findFirst()
+                .map(p -> (p.getDisplayName() != null && !p.getDisplayName().isBlank()) ? p.getDisplayName() : partyId)
+                .orElse(partyId);
+    }
+
+    /** Upserts a profile from registration data, keyed by username (called by SelfRegistrationApiImpl). */
+    public static void registerProfile(String username, UserProfileDto profile) {
+        profiles.put(username, profile);
     }
 
     @Override
     public CompletableFuture<ResponseEntity<UserProfileDto>> getMyProfile() {
         return auth.asAuthenticatedParty(party -> {
-            UserProfileDto profile = profiles.get(party);
+            String key = currentUserKey();
+            UserProfileDto profile = (key != null) ? profiles.get(key) : null;
             if (profile == null) {
                 return CompletableFuture.completedFuture(ResponseEntity.notFound().<UserProfileDto>build());
             }
@@ -56,6 +80,10 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
     @Override
     public CompletableFuture<ResponseEntity<UserProfileDto>> upsertMyProfile(UpdateProfileRequest req) {
         return auth.asAuthenticatedParty(party -> {
+            String key = currentUserKey();
+            if (key == null) {
+                return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.UNAUTHORIZED).<UserProfileDto>build());
+            }
             UserProfileDto profile = new UserProfileDto();
             profile.setPartyId(party);
             profile.setDisplayName(req.getDisplayName());
@@ -67,7 +95,7 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
             profile.setFoundedYear(req.getFoundedYear());
             profile.setDescription(req.getDescription());
             profile.setWebsite(req.getWebsite());
-            profiles.put(party, profile);
+            profiles.put(key, profile);
             return CompletableFuture.completedFuture(ResponseEntity.ok(profile));
         });
     }
@@ -75,7 +103,10 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
     @Override
     public CompletableFuture<ResponseEntity<UserProfileDto>> getProfile(String partyId) {
         return auth.asAuthenticatedParty(party -> {
-            UserProfileDto profile = profiles.get(partyId);
+            UserProfileDto profile = profiles.values().stream()
+                    .filter(p -> partyId.equals(p.getPartyId()))
+                    .findFirst()
+                    .orElse(null);
             if (profile == null) {
                 // Return a stub so the UI can still show the party ID
                 UserProfileDto stub = new UserProfileDto();

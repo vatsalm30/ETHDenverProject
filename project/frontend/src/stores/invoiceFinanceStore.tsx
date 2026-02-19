@@ -15,9 +15,10 @@ import type {
     PaidInvoiceDto,
     CreateInvoiceRequest,
     StartAuctionRequest,
-    GrabAuctionRequest,
-    GrabAuctionResult,
-    SprintBoostRequest,
+    CloseAuctionResult,
+    BidStatusDto,
+    PlaceBidRequest,
+    PlaceBidResult,
     ParseInvoiceRequest,
     ParsedInvoiceDto,
 } from '../openapi.d.ts';
@@ -28,9 +29,7 @@ interface InvoiceFinanceState {
     financedInvoices: FinancedInvoiceDto[];
     bankOwnerships: BankOwnershipDto[];
     paidInvoices: PaidInvoiceDto[];
-    lastGrabResult: GrabAuctionResult | null;
-    auctionCountdown: number;      // seconds remaining in active auction
-    auctionCurrentRate: number;    // live falling rate
+    bidStatuses: Record<string, BidStatusDto>;
 }
 
 interface InvoiceFinanceContextType extends InvoiceFinanceState {
@@ -39,10 +38,11 @@ interface InvoiceFinanceContextType extends InvoiceFinanceState {
     confirmInvoice: (contractId: string) => Promise<void>;
     deleteInvoice: (contractId: string) => Promise<void>;
     startAuction: (contractId: string, req: StartAuctionRequest) => Promise<void>;
-    grabAuction: (contractId: string, req: GrabAuctionRequest) => Promise<GrabAuctionResult | void>;
     cancelAuction: (contractId: string) => Promise<void>;
+    closeAuction: (contractId: string) => Promise<CloseAuctionResult | null>;
+    placeBid: (contractId: string, req: PlaceBidRequest) => Promise<PlaceBidResult | null>;
+    getMyBidStatus: (contractId: string) => Promise<void>;
     payFinancedInvoice: (contractId: string) => Promise<void>;
-    activateSprintBoost: (contractId: string, req: SprintBoostRequest) => Promise<void>;
     parseInvoice: (req: ParseInvoiceRequest) => Promise<ParsedInvoiceDto | null>;
 }
 
@@ -54,9 +54,7 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
     const [financedInvoices, setFinancedInvoices] = useState<FinancedInvoiceDto[]>([]);
     const [bankOwnerships, setBankOwnerships] = useState<BankOwnershipDto[]>([]);
     const [paidInvoices, setPaidInvoices] = useState<PaidInvoiceDto[]>([]);
-    const [lastGrabResult, setLastGrabResult] = useState<GrabAuctionResult | null>(null);
-    const [auctionCountdown, setAuctionCountdown] = useState(0);
-    const [auctionCurrentRate, setAuctionCurrentRate] = useState(0);
+    const [bidStatuses, setBidStatuses] = useState<Record<string, BidStatusDto>>({});
     const toast = useToast();
 
     const fetchAll = useCallback(
@@ -70,16 +68,7 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
                 client.listPaidInvoices(),
             ]);
             if (inv.status === 'fulfilled') setInvoices(inv.value.data);
-            if (auc.status === 'fulfilled') {
-                setAuctions(auc.value.data);
-                // Kick off live countdown for open auctions
-                const openAuctions = auc.value.data.filter(a => a.status === 'OPEN');
-                if (openAuctions.length > 0) {
-                    const first = openAuctions[0];
-                    setAuctionCurrentRate(first.startRate);
-                    setAuctionCountdown(first.auctionDurationSecs);
-                }
-            }
+            if (auc.status === 'fulfilled') setAuctions(auc.value.data);
             if (fin.status === 'fulfilled') setFinancedInvoices(fin.value.data);
             if (bo.status === 'fulfilled') setBankOwnerships(bo.value.data);
             if (paid.status === 'fulfilled') setPaidInvoices(paid.value.data);
@@ -104,7 +93,7 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
             const commandId = generateCommandId();
             await client.confirmInvoice({ contractId, commandId });
             await fetchAll();
-            toast.displaySuccess('Invoice confirmed — buyer acknowledges delivery');
+            toast.displaySuccess('Invoice confirmed');
         }),
         [fetchAll, toast]
     );
@@ -124,30 +113,9 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
         withErrorHandling('Starting auction')(async (contractId: string, req: StartAuctionRequest) => {
             const client: Client = await api.getClient();
             const commandId = generateCommandId();
-            let succeeded = false;
-            try {
-                await client.startAuction({ contractId, commandId }, req);
-                succeeded = true;
-            } finally {
-                // Always refresh — clears stale/archived contracts from the list on failure too
-                await fetchAll();
-            }
-            if (succeeded) toast.displaySuccess('Dutch auction started! Banks can now bid.');
-        }),
-        [fetchAll, toast]
-    );
-
-    const grabAuction = useCallback(
-        withErrorHandling('Grabbing auction')(async (contractId: string, req: GrabAuctionRequest) => {
-            const client: Client = await api.getClient();
-            const commandId = generateCommandId();
-            const result = await client.grabAuction({ contractId, commandId }, req);
-            setLastGrabResult(result.data);
+            await client.startAuction({ contractId, commandId }, req);
             await fetchAll();
-            toast.displaySuccess(
-                `🏆 Won at ${result.data.purchaseRate?.toFixed(2)}% — $${result.data.purchaseAmount?.toLocaleString()} paid to supplier`
-            );
-            return result.data;
+            toast.displaySuccess('Auction started! Institutions can now place bids.');
         }),
         [fetchAll, toast]
     );
@@ -163,13 +131,72 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
         [fetchAll, toast]
     );
 
+    const closeAuction = useCallback(async (contractId: string): Promise<CloseAuctionResult | null> => {
+        try {
+            const client: Client = await api.getClient();
+            const commandId = generateCommandId();
+            const result = await client.closeAuction({ contractId, commandId });
+            await fetchAll();
+            if (result.data.noWinner) {
+                toast.displaySuccess('Auction closed — no bids were placed. Auction cancelled.');
+            } else {
+                toast.displaySuccess(
+                    `Auction settled! Winner: ${result.data.winningInstitutionDisplayName ?? result.data.winningInstitutionPartyId} at ${result.data.winningRate?.toFixed(2)}%`
+                );
+            }
+            return result.data;
+        } catch (e) {
+            console.error('closeAuction failed', e);
+            toast.displayError('Failed to close auction');
+            return null;
+        }
+    }, [fetchAll, toast]);
+
+    const placeBid = useCallback(async (contractId: string, req: PlaceBidRequest): Promise<PlaceBidResult | null> => {
+        try {
+            const client: Client = await api.getClient();
+            const commandId = generateCommandId();
+            const result = await client.placeBid({ contractId, commandId }, req);
+            // Update bid status for this auction
+            setBidStatuses(prev => ({
+                ...prev,
+                [contractId]: {
+                    hasBid: true,
+                    isWinning: result.data.isCurrentBestBid,
+                    myRate: req.offeredRate,
+                    currentBestRate: result.data.currentBestRate,
+                },
+            }));
+            if (result.data.isCurrentBestBid) {
+                toast.displaySuccess(`Bid placed at ${req.offeredRate.toFixed(2)}% — you have the best offer!`);
+            } else {
+                toast.displaySuccess(`Bid placed at ${req.offeredRate.toFixed(2)}%. Current best: ${result.data.currentBestRate.toFixed(2)}%`);
+            }
+            return result.data;
+        } catch (e) {
+            console.error('placeBid failed', e);
+            toast.displayError('Failed to place bid');
+            return null;
+        }
+    }, [toast]);
+
+    const getMyBidStatus = useCallback(async (contractId: string): Promise<void> => {
+        try {
+            const client: Client = await api.getClient();
+            const result = await client.getMyBidStatus({ contractId });
+            setBidStatuses(prev => ({ ...prev, [contractId]: result.data }));
+        } catch (e) {
+            console.error('getMyBidStatus failed', e);
+        }
+    }, []);
+
     const payFinancedInvoice = useCallback(
         withErrorHandling('Paying invoice')(async (contractId: string) => {
             const client: Client = await api.getClient();
             const commandId = generateCommandId();
             await client.payFinancedInvoice({ contractId, commandId });
             await fetchAll();
-            toast.displaySuccess('Invoice paid! 🎉');
+            toast.displaySuccess('Invoice paid!');
         }),
         [fetchAll, toast]
     );
@@ -185,17 +212,6 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
         }
     }, []);
 
-    const activateSprintBoost = useCallback(
-        withErrorHandling('Activating Sprint Boost')(async (contractId: string, req: SprintBoostRequest) => {
-            const client: Client = await api.getClient();
-            const commandId = generateCommandId();
-            await client.activateSprintBoost({ contractId, commandId }, req);
-            await fetchAll();
-            toast.displaySuccess(`🚀 Sprint Boost activated! Paying early earns you $${req.bountyAmount.toLocaleString()} bounty`);
-        }),
-        [fetchAll, toast]
-    );
-
     return (
         <InvoiceFinanceContext.Provider value={{
             invoices,
@@ -203,18 +219,17 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
             financedInvoices,
             bankOwnerships,
             paidInvoices,
-            lastGrabResult,
-            auctionCountdown,
-            auctionCurrentRate,
+            bidStatuses,
             fetchAll,
             createInvoice,
             confirmInvoice,
             deleteInvoice,
             startAuction,
-            grabAuction,
             cancelAuction,
+            closeAuction,
+            placeBid,
+            getMyBidStatus,
             payFinancedInvoice,
-            activateSprintBoost,
             parseInvoice,
         }}>
             {children}

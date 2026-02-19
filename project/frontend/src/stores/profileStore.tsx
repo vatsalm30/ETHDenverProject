@@ -3,10 +3,10 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import api from '../api';
-import type { Client, UserProfileDto, UpdateProfileRequest } from '../openapi.d.ts';
+import type { Client, UserProfileDto, UpdateProfileRequest, SelfRegistrationRequest, SelfRegistrationResult } from '../openapi.d.ts';
 
 interface ProfileState {
-    myProfile: UserProfileDto | null;
+    myProfile: UserProfileDto | null | undefined; // undefined = not yet fetched, null = fetched but no profile
     profileCache: Record<string, UserProfileDto>;
 }
 
@@ -14,12 +14,14 @@ interface ProfileContextType extends ProfileState {
     fetchMyProfile: () => Promise<void>;
     saveMyProfile: (req: UpdateProfileRequest) => Promise<void>;
     fetchProfile: (partyId: string) => Promise<UserProfileDto | null>;
+    register: (req: SelfRegistrationRequest) => Promise<SelfRegistrationResult>;
+    clearProfile: () => void;
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export const ProfileProvider = ({ children }: { children: React.ReactNode }) => {
-    const [myProfile, setMyProfile] = useState<UserProfileDto | null>(null);
+    const [myProfile, setMyProfile] = useState<UserProfileDto | null | undefined>(undefined);
     const [profileCache, setProfileCache] = useState<Record<string, UserProfileDto>>({});
 
     const fetchMyProfile = useCallback(async () => {
@@ -28,7 +30,8 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
             const resp = await client.getMyProfile();
             setMyProfile(resp.data);
         } catch {
-            // 404 means no profile yet — that's fine
+            // 404 means no profile yet — set to null to signal "fetched but empty"
+            setMyProfile(null);
         }
     }, []);
 
@@ -50,10 +53,24 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         }
     }, [profileCache]);
 
+    const clearProfile = useCallback(() => {
+        setMyProfile(undefined);
+        setProfileCache({});
+    }, []);
+
+    const register = useCallback(async (req: SelfRegistrationRequest): Promise<SelfRegistrationResult> => {
+        const client: Client = await api.getClient();
+        const resp = await client.registerUser(null, req);
+        if (resp.data.profile) {
+            setMyProfile(resp.data.profile);
+        }
+        return resp.data;
+    }, []);
+
     return (
         <ProfileContext.Provider value={{
             myProfile, profileCache,
-            fetchMyProfile, saveMyProfile, fetchProfile,
+            fetchMyProfile, saveMyProfile, fetchProfile, register, clearProfile,
         }}>
             {children}
         </ProfileContext.Provider>

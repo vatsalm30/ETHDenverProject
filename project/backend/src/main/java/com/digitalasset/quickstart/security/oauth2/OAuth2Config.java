@@ -66,10 +66,11 @@ public class OAuth2Config {
                 .csrf((csrf) -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .ignoringRequestMatchers("/auth/register")
                 )
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/user", "/login-links", "/feature-flags", "/oauth2/authorization/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/logout").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/logout", "/auth/register").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
@@ -115,7 +116,10 @@ public class OAuth2Config {
     }
 
     private LogoutSuccessHandler oidcLogoutSuccessHandler() {
-        return new OidcClientInitiatedLogoutSuccessHandler(this.clientRegistrationRepository);
+        OidcClientInitiatedLogoutSuccessHandler handler =
+                new OidcClientInitiatedLogoutSuccessHandler(this.clientRegistrationRepository);
+        handler.setPostLogoutRedirectUri("{baseUrl}");
+        return handler;
     }
 
     @Bean
