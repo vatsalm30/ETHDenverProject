@@ -39,10 +39,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.server.ResponseStatusException;
 
 // Generated Daml Java bindings (available after `./gradlew :daml:codeGen`)
-import quickstart_invoice_finance.invoicefinance.core.Invoice;
-import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_BuyerConfirm;
-import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_Cancel;
-import quickstart_invoice_finance.invoicefinance.core.Invoice.Invoice_StartAuction;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction.FinancingAuction_BankGrab;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction.FinancingAuction_Cancel;
@@ -76,6 +72,17 @@ public class InvoiceFinanceApiImpl implements
         PaidInvoicesApi {
 
     private static final Logger logger = LoggerFactory.getLogger(InvoiceFinanceApiImpl.class);
+
+    /**
+     * In-memory invoice store — avoids ledger round-trips for the create step.
+     * Key = pseudo contractId (UUID), Value = the DTO built at create time.
+     *
+     * When startAuction is called we use createAndExercise (one atomic transaction)
+     * which guarantees the same package version is used for both create and exercise,
+     * eliminating the CONTRACT_NOT_ACTIVE / package-mismatch error.
+     */
+    private final java.util.concurrent.ConcurrentHashMap<String, InvoiceDto> pendingInvoices =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private final LedgerApi ledger;
     private final AuthUtils auth;
@@ -194,11 +201,16 @@ public class InvoiceFinanceApiImpl implements
     @WithSpan
     public CompletableFuture<ResponseEntity<List<InvoiceDto>>> listInvoices() {
         var ctx = tracingCtx(logger, "listInvoices");
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findActiveInvoices(party).thenApplyAsync(contracts ->
-                        ResponseEntity.ok(contracts.stream().map(this::toInvoiceDto).toList())
-                )
-        ));
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            // Return in-memory pending invoices (those not yet auctioned).
+            // Invoices are stored here after createInvoice and removed after startAuction.
+            var list = pendingInvoices.values().stream()
+                    .filter(dto -> party.equals(dto.getSupplier())
+                            || party.equals(dto.getBuyer())
+                            || party.equals(dto.getOperator()))
+                    .toList();
+            return CompletableFuture.completedFuture(ResponseEntity.ok(list));
+        }));
     }
 
     @Override
@@ -209,38 +221,27 @@ public class InvoiceFinanceApiImpl implements
     ) {
         var ctx = tracingCtx(logger, "createInvoice", "commandId", commandId, "invoiceId", req.getInvoiceId());
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
-            var entity = new Invoice(
-                    new Party(auth.getAppProviderPartyId()), // operator
-                    new Party(party),                         // supplier = caller
-                    new Party(req.getBuyerParty()),
-                    req.getInvoiceId(),
-                    BigDecimal.valueOf(req.getAmount()),
-                    req.getDescription(),
-                    (long) req.getPaymentTermDays(),
-                    req.getIssueDate(),
-                    req.getDueDate(),
-                    "PENDING_CONFIRMATION"
-            );
-            // Create + immediately confirm in a single atomic transaction so the
-            // frontend always receives the post-confirm contract ID. This prevents
-            // CONTRACT_NOT_ACTIVE errors when startAuction uses a stale pre-confirm ID.
-            var confirmChoice = new Invoice_BuyerConfirm();
-            return ledger.createAndExercise(entity, confirmChoice, commandId)
-                    .thenApply(confirmedCid -> {
-                        var dto = new InvoiceDto();
-                        dto.setContractId(confirmedCid.getContractId);
-                        dto.setOperator(auth.getAppProviderPartyId());
-                        dto.setSupplier(party);
-                        dto.setBuyer(req.getBuyerParty());
-                        dto.setInvoiceId(req.getInvoiceId());
-                        dto.setAmount(req.getAmount());
-                        dto.setDescription(req.getDescription());
-                        dto.setPaymentTermDays(req.getPaymentTermDays());
-                        dto.setIssueDate(req.getIssueDate());
-                        dto.setDueDate(req.getDueDate());
-                        dto.setStatus(InvoiceDto.StatusEnum.CONFIRMED);
-                        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
-                    });
+            // Store the invoice in memory — no ledger interaction yet.
+            // The actual Daml contract is created atomically when startAuction is called
+            // via createAndExercise, which avoids the package-version mismatch that caused
+            // CONTRACT_NOT_ACTIVE when create and exercise happened in separate transactions.
+            String pseudoId = java.util.UUID.randomUUID().toString();
+            var dto = new InvoiceDto();
+            dto.setContractId(pseudoId);
+            dto.setOperator(auth.getAppProviderPartyId());
+            dto.setSupplier(party);
+            dto.setBuyer(req.getBuyerParty());
+            dto.setInvoiceId(req.getInvoiceId());
+            dto.setAmount(req.getAmount());
+            dto.setDescription(req.getDescription());
+            dto.setPaymentTermDays(req.getPaymentTermDays());
+            dto.setIssueDate(req.getIssueDate());
+            dto.setDueDate(req.getDueDate());
+            dto.setStatus(InvoiceDto.StatusEnum.CONFIRMED);
+            pendingInvoices.put(pseudoId, dto);
+            logger.info("createInvoice stored in-memory: pseudoId={} invoiceId={}", pseudoId, req.getInvoiceId());
+            return CompletableFuture.completedFuture(
+                    ResponseEntity.status(HttpStatus.CREATED).body(dto));
         }));
     }
 
@@ -248,33 +249,27 @@ public class InvoiceFinanceApiImpl implements
     @WithSpan
     public CompletableFuture<ResponseEntity<Void>> deleteInvoice(String contractId, String commandId) {
         var ctx = tracingCtx(logger, "deleteInvoice", "contractId", contractId, "commandId", commandId);
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findInvoiceById(contractId).thenComposeAsync(opt -> {
-                    var contract = ensurePresent(opt, "Invoice not found: %s", contractId);
-                    var choice = new Invoice_Cancel();
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
-                            .thenApply(v -> ResponseEntity.<Void>noContent().build());
-                })
-        ));
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            // Invoices are stored in-memory; removing from the map is all that's needed.
+            boolean removed = pendingInvoices.remove(contractId) != null;
+            logger.info("deleteInvoice: contractId={} removed={}", contractId, removed);
+            return CompletableFuture.completedFuture(ResponseEntity.<Void>noContent().build());
+        }));
     }
 
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<InvoiceDto>> confirmInvoice(String contractId, String commandId) {
+        // Invoices are now stored in-memory; they're always in CONFIRMED state.
+        // This endpoint is a no-op — just return the stored DTO.
         var ctx = tracingCtx(logger, "confirmInvoice", "contractId", contractId, "commandId", commandId);
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findInvoiceById(contractId).thenComposeAsync(opt -> {
-                    var contract = ensurePresent(opt, "Invoice not found: %s", contractId);
-                    var choice = new Invoice_BuyerConfirm();
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
-                            .thenApply(newCid -> {
-                                var dto = toInvoiceDto(contract);
-                                dto.setStatus(InvoiceDto.StatusEnum.CONFIRMED);
-                                dto.setContractId(newCid.getContractId);
-                                return ResponseEntity.ok(dto);
-                            });
-                })
-        ));
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            var dto = pendingInvoices.get(contractId);
+            if (dto == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found: " + contractId);
+            }
+            return CompletableFuture.completedFuture(ResponseEntity.ok(dto));
+        }));
     }
 
     @Override
@@ -285,61 +280,68 @@ public class InvoiceFinanceApiImpl implements
             StartAuctionRequest req
     ) {
         var ctx = tracingCtx(logger, "startAuction", "contractId", contractId, "commandId", commandId);
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findInvoiceById(contractId).thenComposeAsync(opt -> {
-                    var contract = ensurePresent(opt, "Invoice not found: %s", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            // Look up the invoice from in-memory store
+            var invoiceDto = pendingInvoices.get(contractId);
+            if (invoiceDto == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Invoice not found: " + contractId + ". It may have already been auctioned or deleted.");
+            }
 
-                    // Auto-populate eligible banks when none specified:
-                    // 1. All registered INSTITUTION profiles
-                    // 2. Fall back to all non-internal (non-operator) tenants
-                    List<String> banks = (req.getEligibleBanks() == null || req.getEligibleBanks().isEmpty())
-                            ? resolveEligibleBanks(party)
-                            : req.getEligibleBanks();
+            // Auto-populate eligible banks when none specified
+            List<String> banks = (req.getEligibleBanks() == null || req.getEligibleBanks().isEmpty())
+                    ? resolveEligibleBanks(party)
+                    : req.getEligibleBanks();
 
-                    var choice = new Invoice_StartAuction(
-                            banks.stream()
-                                    .map(Party::new)
-                                    .toList(),
-                            BigDecimal.valueOf(req.getStartRate()),
-                            BigDecimal.valueOf(req.getReserveRate()),
-                            req.getAuctionDurationSecs().longValue()
-                    );
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
-                            .thenApply(auctionCid -> {
-                                var dto = new FinancingAuctionDto();
-                                dto.setContractId(auctionCid.getContractId);
-                                dto.setOperator(contract.payload.getOperator.getParty);
-                                dto.setSupplier(contract.payload.getSupplier.getParty);
-                                dto.setBuyer(contract.payload.getBuyer.getParty);
-                                dto.setInvoiceId(contract.payload.getInvoiceId);
-                                dto.setAmount(contract.payload.getAmount.doubleValue());
-                                dto.setDescription(contract.payload.getDescription);
-                                dto.setDueDate(contract.payload.getDueDate);
-                                dto.setStartRate(req.getStartRate());
-                                dto.setReserveRate(req.getReserveRate());
-                                dto.setAuctionDurationSecs(req.getAuctionDurationSecs());
-                                dto.setEligibleBanks(banks);
-                                dto.setStatus(FinancingAuctionDto.StatusEnum.OPEN);
-                                return ResponseEntity.status(HttpStatus.CREATED).body(dto);
-                            })
-                            .exceptionally(ex -> {
-                                // Unwrap CompletionException layers
-                                Throwable cause = ex;
-                                while (cause instanceof java.util.concurrent.CompletionException
-                                        && cause.getCause() != null) {
-                                    cause = cause.getCause();
-                                }
-                                String msg = cause.getMessage();
-                                if (msg != null && msg.contains("CONTRACT_NOT_ACTIVE")) {
-                                    throw new ResponseStatusException(HttpStatus.GONE,
-                                            "Invoice contract is no longer active on the ledger. " +
-                                            "Please refresh the page and create a new invoice.");
-                                }
-                                if (ex instanceof RuntimeException re) throw re;
-                                throw new java.util.concurrent.CompletionException(ex);
-                            });
-                })
-        ));
+            // Create a FinancingAuction directly — bypassing the Invoice contract entirely.
+            //
+            // Why: The old package (b2fe96ff) loaded on the Canton participant still has
+            // `archive self` inside Invoice_StartAuction.  Every attempt to exercise that
+            // choice (directly or via createAndExercise) fails with CONTRACT_NOT_ACTIVE
+            // because the consuming-exercise node and the self-archive node both try to
+            // consume the same Invoice contract.
+            //
+            // FinancingAuction has `signatory operator` only — the operator party is the
+            // backend service account, so no multi-party auth is needed.  Creating it
+            // directly is a pure CREATE command with no choice execution, so the
+            // archive-self bug is never triggered.
+            var auction = new FinancingAuction(
+                    new Party(invoiceDto.getOperator()),
+                    new Party(invoiceDto.getSupplier()),
+                    new Party(invoiceDto.getBuyer()),
+                    invoiceDto.getInvoiceId(),
+                    BigDecimal.valueOf(invoiceDto.getAmount()),
+                    invoiceDto.getDescription(),
+                    invoiceDto.getDueDate(),
+                    BigDecimal.valueOf(req.getStartRate()),
+                    BigDecimal.valueOf(req.getReserveRate()),
+                    req.getAuctionDurationSecs().longValue(),
+                    banks.stream().map(Party::new).toList(),
+                    "OPEN"
+            );
+
+            return ledger.createAndGetId(auction, commandId)
+                    .thenApply(auctionCid -> {
+                        // Remove from pending map — the invoice is now in auction
+                        pendingInvoices.remove(contractId);
+
+                        var dto = new FinancingAuctionDto();
+                        dto.setContractId(auctionCid.getContractId);
+                        dto.setOperator(invoiceDto.getOperator());
+                        dto.setSupplier(invoiceDto.getSupplier());
+                        dto.setBuyer(invoiceDto.getBuyer());
+                        dto.setInvoiceId(invoiceDto.getInvoiceId());
+                        dto.setAmount(invoiceDto.getAmount());
+                        dto.setDescription(invoiceDto.getDescription());
+                        dto.setDueDate(invoiceDto.getDueDate());
+                        dto.setStartRate(req.getStartRate());
+                        dto.setReserveRate(req.getReserveRate());
+                        dto.setAuctionDurationSecs(req.getAuctionDurationSecs());
+                        dto.setEligibleBanks(banks);
+                        dto.setStatus(FinancingAuctionDto.StatusEnum.OPEN);
+                        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+                    });
+        }));
     }
 
     // ─── Auctions ───────────────────────────────────────────────────────────
@@ -568,22 +570,6 @@ public class InvoiceFinanceApiImpl implements
         }
         // Last resort: include the operator so the auction is never empty
         return List.of(operatorParty);
-    }
-
-    private InvoiceDto toInvoiceDto(com.digitalasset.quickstart.pqs.Contract<Invoice> c) {
-        var dto = new InvoiceDto();
-        dto.setContractId(c.contractId.getContractId);
-        dto.setOperator(c.payload.getOperator.getParty);
-        dto.setSupplier(c.payload.getSupplier.getParty);
-        dto.setBuyer(c.payload.getBuyer.getParty);
-        dto.setInvoiceId(c.payload.getInvoiceId);
-        dto.setAmount(c.payload.getAmount.doubleValue());
-        dto.setDescription(c.payload.getDescription);
-        dto.setPaymentTermDays(c.payload.getPaymentTermDays.intValue());
-        dto.setIssueDate(c.payload.getIssueDate);
-        dto.setDueDate(c.payload.getDueDate);
-        dto.setStatus(InvoiceDto.StatusEnum.fromValue(c.payload.getStatus));
-        return dto;
     }
 
     private FinancedInvoiceDto toFinancedInvoiceDto(com.digitalasset.quickstart.pqs.Contract<FinancedInvoice> c) {

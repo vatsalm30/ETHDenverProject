@@ -91,6 +91,62 @@ public class LedgerApi {
     }
 
     /**
+     * Creates a contract and returns its ContractId by waiting for the ledger confirmation.
+     * More reliable than fire-and-forget {@link #create} when the caller needs the resulting ID.
+     */
+    @WithSpan
+    public <T extends Template> CompletableFuture<ContractId<T>> createAndGetId(
+            T entity,
+            String commandId
+    ) {
+        var ctx = tracingCtx(logger, "CreateAndGetId",
+                "commandId", commandId,
+                "templateId", entity.templateId().toString()
+        );
+        return trace(ctx, () -> {
+            ValueOuterClass.Value payload = dto2Proto.template(entity.templateId()).convert(entity);
+
+            CommandsOuterClass.Command.Builder cmdBuilder = CommandsOuterClass.Command.newBuilder();
+            cmdBuilder.getCreateBuilder()
+                    .setTemplateId(toIdentifier(entity.templateId()))
+                    .setCreateArguments(payload.getRecord());
+
+            CommandsOuterClass.Commands commandsMsg = CommandsOuterClass.Commands.newBuilder()
+                    .setCommandId(commandId)
+                    .addActAs(appProviderParty)
+                    .addReadAs(appProviderParty)
+                    .addCommands(cmdBuilder.build())
+                    .build();
+
+            var eventFormat = TransactionFilterOuterClass.EventFormat.newBuilder()
+                    .putFiltersByParty(appProviderParty, TransactionFilterOuterClass.Filters.newBuilder().build())
+                    .build();
+            var transactionFormat = TransactionFilterOuterClass.TransactionFormat.newBuilder()
+                    .setEventFormat(eventFormat)
+                    .setTransactionShape(TransactionFilterOuterClass.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS)
+                    .build();
+
+            CommandServiceOuterClass.SubmitAndWaitForTransactionRequest request =
+                    CommandServiceOuterClass.SubmitAndWaitForTransactionRequest.newBuilder()
+                            .setCommands(commandsMsg)
+                            .setTransactionFormat(transactionFormat)
+                            .build();
+
+            return toCompletableFuture(commands.submitAndWaitForTransaction(request))
+                    .thenApply(response -> {
+                        var tx = response.getTransaction();
+                        for (int i = 0; i < tx.getEventsCount(); i++) {
+                            var event = tx.getEvents(i);
+                            if (event.hasCreated()) {
+                                return new ContractId<T>(event.getCreated().getContractId());
+                            }
+                        }
+                        throw new IllegalStateException("No created event in createAndGetId response");
+                    });
+        });
+    }
+
+    /**
      * Creates a contract and immediately exercises a choice on it in a single atomic transaction.
      * Returns the exercise result (e.g. a new ContractId from a consuming choice).
      */
