@@ -1,4 +1,4 @@
-// Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2026 ETHDenver Hackathon. All rights reserved.
 // SPDX-License-Identifier: 0BSD
 
 import React, { useEffect } from 'react';
@@ -12,18 +12,12 @@ const HomeView: React.FC = () => {
     useEffect(() => {
         if (!loading && user === null) {
             navigate('/login');
+        } else if (!loading && user !== null) {
+            navigate('/dashboard');
         }
     }, [user, loading, navigate]);
 
-    if (loading) {
-        return null;
-    }
-
-    return (
-        <main>
-            <h1>Home</h1>
-        </main>
-    );
+    return null;
 };
 
 export default HomeView;

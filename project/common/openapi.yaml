@@ -1,8 +1,8 @@
 openapi: 3.0.0
 info:
-  title: Backend API
-  description: API to manage AppInstalls, Licenses, Tenant Registrations, and Invoice Financing (Deadline Derby)
-  version: 1.0.0
+  title: Canton Invoice Financing API
+  description: API for peer-to-peer invoice financing with competitive sealed-bid auctions on Canton Network
+  version: 2.0.0
 
 tags:
   - name: Feature Flags
@@ -63,6 +63,37 @@ paths:
                 $ref: '#/components/schemas/AuthenticatedUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Self-register a new Company or Institution user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelfRegistrationRequest'
+      responses:
+        '201':
+          description: User registered and profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfRegistrationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '501':
+          description: Not supported in OAuth2 mode
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -599,6 +630,85 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions/{contractId}:bid:
+    post:
+      tags: [Financing Auctions]
+      summary: Institution places or updates a sealed bid on an auction
+      operationId: placeBid
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceBidRequest'
+      responses:
+        '200':
+          description: Bid placed or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceBidResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions/{contractId}/my-bid-status:
+    get:
+      tags: [Financing Auctions]
+      summary: Returns the calling institution's current bid status on this auction
+      operationId: getMyBidStatus
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Current bid status for the authenticated institution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidStatusDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auctions/{contractId}:close:
+    post:
+      tags: [Financing Auctions]
+      summary: Company closes the auction — backend picks winning bid and settles on ledger
+      operationId: closeAuction
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Auction closed and winning bid settled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloseAuctionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1334,7 +1444,7 @@ components:
           type: array
           items:
             type: string
-          description: Canton party IDs of eligible banks
+          description: Canton party IDs of eligible banks (auto-populated if empty)
         startRate:
           type: number
           format: double
@@ -1347,8 +1457,15 @@ components:
           example: 95.0
         auctionDurationSecs:
           type: integer
-          description: Duration of Dutch auction in seconds
+          description: Duration of auction in seconds (use auctionDurationDays for day-based input)
           example: 60
+        auctionDurationDays:
+          type: integer
+          description: >
+            Duration of auction in days (1 to days until invoice expiry).
+            If provided, takes precedence over auctionDurationSecs.
+          example: 7
+          nullable: true
 
     FinancingAuctionDto:
       type: object
@@ -1400,6 +1517,23 @@ components:
         status:
           type: string
           enum: [OPEN, CLOSED]
+        currentBestRate:
+          type: number
+          format: double
+          description: >
+            Current lowest rate offered across all sealed bids (from in-memory store).
+            Visible to the supplier and all eligible institutions. Never reveals who bid.
+          nullable: true
+        bidCount:
+          type: integer
+          description: >
+            Number of distinct bids placed. Only shown to the company running the auction.
+          nullable: true
+        auctionEndTime:
+          type: string
+          format: date-time
+          description: When the auction expires (creation time + duration)
+          nullable: true
 
     GrabAuctionRequest:
       type: object
@@ -1642,6 +1776,147 @@ components:
           type: string
         website:
           type: string
+
+    # ── Sealed-Bid Auction Schemas ────────────────────────────────────────────
+
+    PlaceBidRequest:
+      type: object
+      required:
+        - offeredRate
+      properties:
+        offeredRate:
+          type: number
+          format: double
+          description: >
+            The advance rate this institution is willing to offer
+            (e.g. 97.5 means they will advance 97.5% of the face value).
+            Lower rate = better bid = more likely to win.
+          example: 97.5
+
+    PlaceBidResult:
+      type: object
+      required:
+        - isCurrentBestBid
+        - currentBestRate
+      properties:
+        isCurrentBestBid:
+          type: boolean
+          description: True if this bid is currently the best (lowest rate)
+        currentBestRate:
+          type: number
+          format: double
+          description: The current best rate across all bids (rounded; never reveals whose)
+
+    BidStatusDto:
+      type: object
+      required:
+        - hasBid
+        - isWinning
+      properties:
+        hasBid:
+          type: boolean
+          description: True if the authenticated institution has placed a bid
+        isWinning:
+          type: boolean
+          description: True if this institution holds the current best bid
+        myRate:
+          type: number
+          format: double
+          description: The rate this institution submitted (only returned to the bidder)
+          nullable: true
+        currentBestRate:
+          type: number
+          format: double
+          description: The best rate in the pool (visible to all eligible institutions)
+          nullable: true
+
+    CloseAuctionResult:
+      type: object
+      required:
+        - noWinner
+      properties:
+        noWinner:
+          type: boolean
+          description: True when no bids were placed and auction was cancelled
+        winningInstitutionPartyId:
+          type: string
+          description: Party ID of the winning institution (revealed to company only)
+          nullable: true
+        winningInstitutionDisplayName:
+          type: string
+          description: Display name of winning institution (if profile exists)
+          nullable: true
+        winningRate:
+          type: number
+          format: double
+          description: The winning advance rate
+          nullable: true
+        financedInvoiceContractId:
+          type: string
+          nullable: true
+        purchaseAmount:
+          type: number
+          format: double
+          description: Amount paid to the supplier by the winning institution
+          nullable: true
+
+    SelfRegistrationRequest:
+      type: object
+      required:
+        - username
+        - password
+        - displayName
+        - type
+      properties:
+        username:
+          type: string
+          example: "acme-corp"
+        password:
+          type: string
+          format: password
+          example: "secret123"
+        displayName:
+          type: string
+          example: "Acme Corporation"
+        type:
+          type: string
+          enum: [COMPANY, INSTITUTION]
+          example: "COMPANY"
+        sector:
+          type: string
+          example: "Manufacturing"
+          nullable: true
+        annualRevenue:
+          type: number
+          format: double
+          nullable: true
+        employeeCount:
+          type: integer
+          nullable: true
+        foundedYear:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+
+    SelfRegistrationResult:
+      type: object
+      required:
+        - partyId
+        - username
+        - profile
+      properties:
+        partyId:
+          type: string
+          description: Canton party ID allocated for this user
+        username:
+          type: string
+        profile:
+          $ref: '#/components/schemas/UserProfileDto'
 
     # ── Original Schemas (unchanged) ─────────────────────────────────────────
 

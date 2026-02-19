@@ -405,6 +405,30 @@ public class LedgerApi {
         });
     }
 
+    /**
+     * Archives a contract directly using the built-in Daml "Archive" choice.
+     * Use this instead of exercising a template-specific Cancel/Archive choice when
+     * the deployed package has an `archive self` bug that causes CONTRACT_NOT_ACTIVE.
+     */
+    @WithSpan
+    public <T extends Template> CompletableFuture<Void> archive(
+            ContractId<T> contractId,
+            Identifier templateId,
+            String commandId
+    ) {
+        CommandsOuterClass.Command.Builder cmdBuilder = CommandsOuterClass.Command.newBuilder();
+        cmdBuilder.getExerciseBuilder()
+                .setTemplateId(toIdentifier(templateId))
+                .setContractId(contractId.getContractId)
+                .setChoice("Archive")
+                .setChoiceArgument(
+                        ValueOuterClass.Value.newBuilder()
+                                .setRecord(ValueOuterClass.Record.newBuilder().build())
+                                .build());
+        return submitCommands(List.of(cmdBuilder.build()), commandId)
+                .thenApply(r -> null);
+    }
+
     @WithSpan
     public CompletableFuture<CommandSubmissionServiceOuterClass.SubmitResponse> submitCommands(
             List<CommandsOuterClass.Command> cmds,

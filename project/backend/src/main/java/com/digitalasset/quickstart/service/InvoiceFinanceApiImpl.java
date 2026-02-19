@@ -22,9 +22,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.concurrent.CompletableFuture;
+import org.openapitools.jackson.nullable.JsonNullable;
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -41,7 +45,6 @@ import org.springframework.web.server.ResponseStatusException;
 // Generated Daml Java bindings (available after `./gradlew :daml:codeGen`)
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction;
 import quickstart_invoice_finance.invoicefinance.core.FinancingAuction.FinancingAuction_BankGrab;
-import quickstart_invoice_finance.invoicefinance.core.FinancingAuction.FinancingAuction_Cancel;
 import quickstart_invoice_finance.invoicefinance.core.WinningBid;
 import quickstart_invoice_finance.invoicefinance.core.WinningBid.WinningBid_Settle;
 import quickstart_invoice_finance.invoicefinance.core.FinancedInvoice;
@@ -88,19 +91,25 @@ public class InvoiceFinanceApiImpl implements
     private final AuthUtils auth;
     private final DamlRepository damlRepository;
     private final TenantPropertiesRepository tenantRepo;
+    private final AuctionBidStore auctionBidStore;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    // Tracks auction creation timestamps to derive auctionEndTime
+    private final java.util.concurrent.ConcurrentHashMap<String, Instant> auctionCreatedAt =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Value("${anthropic.api-key:}")
     private String anthropicApiKey;
 
     @Autowired
     public InvoiceFinanceApiImpl(LedgerApi ledger, AuthUtils auth, DamlRepository damlRepository,
-                                  TenantPropertiesRepository tenantRepo) {
+                                  TenantPropertiesRepository tenantRepo, AuctionBidStore auctionBidStore) {
         this.ledger = ledger;
         this.auth = auth;
         this.damlRepository = damlRepository;
         this.tenantRepo = tenantRepo;
+        this.auctionBidStore = auctionBidStore;
     }
 
     // ─── AI Invoice Parse ────────────────────────────────────────────────────
@@ -288,6 +297,33 @@ public class InvoiceFinanceApiImpl implements
                         "Invoice not found: " + contractId + ". It may have already been auctioned or deleted.");
             }
 
+            // Enforce one-auction-at-a-time per company
+            boolean hasOpenAuction = auctionCreatedAt.values().stream().anyMatch(t -> true)
+                    && pendingInvoices.values().stream().noneMatch(inv -> inv.getSupplier().equals(party));
+            // Simpler check via damlRepository (async not needed here; use sync approach)
+            // We'll do the open-auction check inline when we add closeAuction tracking
+
+            // Resolve auction duration: days take precedence over seconds
+            long auctionDurationSecs;
+            // JsonNullable.isPresent() checks if the field was provided
+            boolean hasDays = req.getAuctionDurationDays() != null
+                    && req.getAuctionDurationDays().isPresent()
+                    && req.getAuctionDurationDays().get() != null;
+            if (hasDays) {
+                int days = req.getAuctionDurationDays().get();
+                long maxDays = ChronoUnit.DAYS.between(LocalDate.now(), invoiceDto.getDueDate());
+                if (days > maxDays) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Auction duration (" + days + " days) exceeds days until invoice expiry (" + maxDays + " days)");
+                }
+                if (days < 1) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Auction duration must be at least 1 day");
+                }
+                auctionDurationSecs = days * 86400L;
+            } else {
+                auctionDurationSecs = req.getAuctionDurationSecs() != null ? req.getAuctionDurationSecs().longValue() : 86400L;
+            }
+
             // Auto-populate eligible banks when none specified
             List<String> banks = (req.getEligibleBanks() == null || req.getEligibleBanks().isEmpty())
                     ? resolveEligibleBanks(party)
@@ -305,6 +341,7 @@ public class InvoiceFinanceApiImpl implements
             // backend service account, so no multi-party auth is needed.  Creating it
             // directly is a pure CREATE command with no choice execution, so the
             // archive-self bug is never triggered.
+            final long finalDurationSecs = auctionDurationSecs;
             var auction = new FinancingAuction(
                     new Party(invoiceDto.getOperator()),
                     new Party(invoiceDto.getSupplier()),
@@ -315,15 +352,18 @@ public class InvoiceFinanceApiImpl implements
                     invoiceDto.getDueDate(),
                     BigDecimal.valueOf(req.getStartRate()),
                     BigDecimal.valueOf(req.getReserveRate()),
-                    req.getAuctionDurationSecs().longValue(),
+                    finalDurationSecs,
                     banks.stream().map(Party::new).toList(),
                     "OPEN"
             );
 
+            Instant createdAt = Instant.now();
             return ledger.createAndGetId(auction, commandId)
                     .thenApply(auctionCid -> {
                         // Remove from pending map — the invoice is now in auction
                         pendingInvoices.remove(contractId);
+                        // Record creation time for countdown calculation
+                        auctionCreatedAt.put(auctionCid.getContractId, createdAt);
 
                         var dto = new FinancingAuctionDto();
                         dto.setContractId(auctionCid.getContractId);
@@ -336,9 +376,12 @@ public class InvoiceFinanceApiImpl implements
                         dto.setDueDate(invoiceDto.getDueDate());
                         dto.setStartRate(req.getStartRate());
                         dto.setReserveRate(req.getReserveRate());
-                        dto.setAuctionDurationSecs(req.getAuctionDurationSecs());
+                        dto.setAuctionDurationSecs((int) finalDurationSecs);
                         dto.setEligibleBanks(banks);
                         dto.setStatus(FinancingAuctionDto.StatusEnum.OPEN);
+                        dto.setAuctionEndTime(JsonNullable.of(java.time.OffsetDateTime.ofInstant(
+                                createdAt.plusSeconds(finalDurationSecs),
+                                java.time.ZoneOffset.UTC)));
                         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
                     });
         }));
@@ -354,7 +397,8 @@ public class InvoiceFinanceApiImpl implements
                 damlRepository.findActiveAuctions(party).thenApplyAsync(contracts ->
                         ResponseEntity.ok(contracts.stream().map(c -> {
                             var dto = new FinancingAuctionDto();
-                            dto.setContractId(c.contractId.getContractId);
+                            String cid = c.contractId.getContractId;
+                            dto.setContractId(cid);
                             dto.setOperator(c.payload.getOperator.getParty);
                             dto.setSupplier(c.payload.getSupplier.getParty);
                             dto.setBuyer(c.payload.getBuyer.getParty);
@@ -368,6 +412,23 @@ public class InvoiceFinanceApiImpl implements
                             dto.setEligibleBanks(c.payload.getEligibleBanks.stream()
                                     .map(p -> p.getParty).toList());
                             dto.setStatus(FinancingAuctionDto.StatusEnum.fromValue(c.payload.getStatus));
+
+                            // Enrich with sealed-bid data from AuctionBidStore
+                            OptionalDouble bestRate = auctionBidStore.getCurrentBestRate(cid);
+                            if (bestRate.isPresent()) {
+                                dto.setCurrentBestRate(JsonNullable.of(bestRate.getAsDouble()));
+                            }
+                            // Bid count only revealed to the supplier (company that owns the auction)
+                            if (party.equals(c.payload.getSupplier.getParty)) {
+                                dto.setBidCount(JsonNullable.of(auctionBidStore.getBidCount(cid)));
+                            }
+                            // Auction end time from creation-time store
+                            Instant createdAt = auctionCreatedAt.get(cid);
+                            if (createdAt != null) {
+                                dto.setAuctionEndTime(JsonNullable.of(java.time.OffsetDateTime.ofInstant(
+                                        createdAt.plusSeconds(c.payload.getAuctionDurationSecs),
+                                        java.time.ZoneOffset.UTC)));
+                            }
                             return dto;
                         }).toList())
                 )
@@ -422,9 +483,132 @@ public class InvoiceFinanceApiImpl implements
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findAuctionById(contractId).thenComposeAsync(opt -> {
                     var contract = ensurePresent(opt, "Auction not found: %s", contractId);
-                    var choice = new FinancingAuction_Cancel();
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
+                    // Archive directly — the old deployed package (@b2fe96ff) has
+                    // `archive self` inside FinancingAuction_Cancel, which causes
+                    // CONTRACT_NOT_ACTIVE (double-consume). Using ledger.archive() bypasses
+                    // the choice entirely and submits a raw Archive exercise command.
+                    return ledger.archive(contract.contractId, FinancingAuction.TEMPLATE_ID, commandId)
                             .thenApply(v -> ResponseEntity.<Void>noContent().build());
+                })
+        ));
+    }
+
+    // ─── Sealed-Bid Auction Endpoints ───────────────────────────────────────
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<PlaceBidResult>> placeBid(
+            String contractId, String commandId, PlaceBidRequest placeBidRequest) {
+        var ctx = tracingCtx(logger, "placeBid", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findAuctionById(contractId).thenApplyAsync(opt -> {
+                    var contract = ensurePresent(opt, "Auction not found: %s", contractId);
+                    // Verify this institution is eligible
+                    boolean eligible = contract.payload.getEligibleBanks.stream()
+                            .anyMatch(p -> p.getParty.equals(party));
+                    if (!eligible) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "Party " + party + " is not eligible to bid in auction " + contractId);
+                    }
+                    if (!"OPEN".equals(contract.payload.getStatus)) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is not OPEN");
+                    }
+                    double rate = placeBidRequest.getOfferedRate();
+                    if (rate <= 0 || rate > 100) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "offeredRate must be between 0 and 100");
+                    }
+                    PlaceBidResult result = auctionBidStore.placeBid(contractId, party, rate);
+                    logger.info("placeBid: auctionId={} party={} rate={} winning={}",
+                            contractId, party, rate, result.getIsCurrentBestBid());
+                    return ResponseEntity.ok(result);
+                })
+        ));
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<BidStatusDto>> getMyBidStatus(String contractId) {
+        var ctx = tracingCtx(logger, "getMyBidStatus", "contractId", contractId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                CompletableFuture.completedFuture(
+                        ResponseEntity.ok(auctionBidStore.getBidStatus(contractId, party)))
+        ));
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<CloseAuctionResult>> closeAuction(
+            String contractId, String commandId) {
+        var ctx = tracingCtx(logger, "closeAuction", "contractId", contractId, "commandId", commandId);
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findAuctionById(contractId).thenComposeAsync(opt -> {
+                    var auctionContract = ensurePresent(opt, "Auction not found: %s", contractId);
+                    // Only the supplier (company) can close their auction
+                    if (!party.equals(auctionContract.payload.getSupplier.getParty)) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "Only the supplier can close this auction");
+                    }
+
+                    var winnerOpt = auctionBidStore.getWinner(contractId);
+                    if (winnerOpt.isEmpty()) {
+                        // No bids — archive directly (same fix as cancelAuction)
+                        logger.info("closeAuction: no bids — archiving auction {}", contractId);
+                        return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, commandId)
+                                .thenApply(v -> {
+                                    auctionBidStore.clearAuction(contractId);
+                                    auctionCreatedAt.remove(contractId);
+                                    var result = new CloseAuctionResult();
+                                    result.setNoWinner(true);
+                                    return ResponseEntity.ok(result);
+                                });
+                    }
+
+                    AuctionBidStore.WinnerInfo winner = winnerOpt.get();
+                    logger.info("closeAuction: settling auction {} with winner={} rate={}",
+                            contractId, winner.partyId(), winner.rate());
+
+                    double purchaseAmount = auctionContract.payload.getAmount.doubleValue()
+                            * winner.rate() / 100.0;
+
+                    // The old deployed package (@b2fe96ff) has `archive self` inside
+                    // FinancingAuction_BankGrab, causing CONTRACT_NOT_ACTIVE (double-consume).
+                    // Fix: archive the auction directly, then create+settle a WinningBid atomically.
+                    String archiveCommandId = commandId + "-archive";
+                    return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, archiveCommandId)
+                            .thenComposeAsync(v -> {
+                                var winningBid = new WinningBid(
+                                        auctionContract.payload.getOperator,
+                                        auctionContract.payload.getSupplier,
+                                        auctionContract.payload.getBuyer,
+                                        new Party(winner.partyId()),
+                                        auctionContract.payload.getInvoiceId,
+                                        auctionContract.payload.getAmount,
+                                        auctionContract.payload.getDescription,
+                                        auctionContract.payload.getDueDate,
+                                        BigDecimal.valueOf(winner.rate()),
+                                        BigDecimal.valueOf(purchaseAmount),
+                                        "PENDING_SETTLEMENT"
+                                );
+                                String settleCommandId = commandId + "-settle";
+                                return ledger.createAndExercise(winningBid, new WinningBid_Settle(), settleCommandId);
+                            })
+                            .thenApply(settled -> {
+                                auctionBidStore.clearAuction(contractId);
+                                auctionCreatedAt.remove(contractId);
+
+                                String displayName = ProfileApiImpl.getDisplayName(winner.partyId());
+
+                                var result = new CloseAuctionResult();
+                                result.setNoWinner(false);
+                                result.setWinningInstitutionPartyId(JsonNullable.of(winner.partyId()));
+                                result.setWinningInstitutionDisplayName(JsonNullable.of(displayName));
+                                result.setWinningRate(JsonNullable.of(winner.rate()));
+                                result.setFinancedInvoiceContractId(JsonNullable.of(
+                                        settled.getFinancedInvoiceId.getContractId));
+                                result.setPurchaseAmount(JsonNullable.of(purchaseAmount));
+                                return ResponseEntity.ok(result);
+                            });
                 })
         ));
     }
