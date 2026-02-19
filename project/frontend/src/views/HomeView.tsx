@@ -12,6 +12,8 @@ const HomeView: React.FC = () => {
     useEffect(() => {
         if (!loading && user === null) {
             navigate('/login');
+        } else if (!loading && user !== null) {
+            navigate('/dashboard');
         }
     }, [user, loading, navigate]);
 

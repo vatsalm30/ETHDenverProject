@@ -56,12 +56,12 @@ export default defineConfig(({ mode }: ConfigEnv) => {
                     rewrite: path => path.replace(/^\/api/, ''),
                     configure: setProxyCustomHeaders
                 },
-                '/login': {
+                '/login/oauth2': {
                     target: `http://localhost:${backendPort}/`,
                     changeOrigin: false,
                     configure: setProxyCustomHeaders
                 },
-                '/login/oauth2': {
+                '/login/shared-secret': {
                     target: `http://localhost:${backendPort}/`,
                     changeOrigin: false,
                     configure: setProxyCustomHeaders

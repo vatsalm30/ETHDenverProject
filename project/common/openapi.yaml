@@ -1097,6 +1097,9 @@ components:
           type: string
         url:
           type: string
+        registrationUrl:
+          type: string
+          description: Keycloak registration URL for new user sign-up (OAuth2 mode only)
 
     AppInstallRequest:
       type: object

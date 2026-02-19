@@ -9,6 +9,7 @@ public interface AuthClientRegistrationRepository {
     void removeClientRegistrations(String tenantId);
     Collection<Client> getClientRegistrations();
     String getLoginLink(String clientRegistrationId);
+    String getRegistrationLink(String clientRegistrationId, String baseUrl);
 
     class Client {
         private String registrationId;

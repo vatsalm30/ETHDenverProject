@@ -119,6 +119,20 @@ public class OAuth2ClientRegistrationRepository
     }
 
     @Override
+    public String getRegistrationLink(String clientRegistrationId, String baseUrl) {
+        ClientRegistration reg = registrations.get(clientRegistrationId);
+        if (reg == null) return null;
+        String issuerUrl = reg.getProviderDetails().getIssuerUri();
+        String clientId = reg.getClientId();
+        String redirectUri = baseUrl + "/login/oauth2/code/" + clientRegistrationId;
+        return issuerUrl + "/protocol/openid-connect/registrations"
+                + "?client_id=" + clientId
+                + "&response_type=code"
+                + "&scope=openid"
+                + "&redirect_uri=" + redirectUri;
+    }
+
+    @Override
     public Iterator<ClientRegistration> iterator() {
         return registrations.values().iterator();
     }
