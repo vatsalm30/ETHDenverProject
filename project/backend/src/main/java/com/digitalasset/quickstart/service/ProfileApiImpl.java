@@ -51,6 +51,13 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
                 .toList();
     }
 
+    /** Returns the profile type for a given username, or null if not found. */
+    public static UserProfileDto.TypeEnum getProfileType(String username) {
+        if (username == null) return null;
+        UserProfileDto p = profiles.get(username);
+        return (p != null) ? p.getType() : null;
+    }
+
     /** Returns the display name for a party, or the party ID if no profile is registered. */
     public static String getDisplayName(String partyId) {
         return profiles.values().stream()

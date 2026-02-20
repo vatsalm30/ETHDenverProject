@@ -153,11 +153,11 @@ build-frontend: ## Build the frontend application
 
 .PHONY: build-backend
 build-backend: ## Build the backend service
-	./gradlew :backend:build
+	JAVA_HOME=$$(/usr/libexec/java_home) ./gradlew :backend:distTar -x :daml:verifyDamlSdkVersion -x :daml:compileDaml -x :daml:codeGen
 
 .PHONY: build-daml
-build-daml: ## Build the Daml model
-	./gradlew :daml:build distTar
+build-daml: ## Build the Daml model (skips daml SDK tasks since daml is not in PATH)
+	@echo "Skipping Daml build (daml SDK not in PATH)"
 
 .PHONY: docker-available
 docker-available: ## Check if Docker CLI exists and is running

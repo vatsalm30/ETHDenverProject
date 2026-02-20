@@ -1,40 +1,72 @@
-/* Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved. */
-/* SPDX-License-Identifier: 0BSD */
+/* Cupid Theme — Canton Invoice Finance */
 
-.table.table-fixed {
-  table-layout: fixed;
-  width: 100%;
+:root {
+  --c-bg:       #FFF0F5;
+  --c-primary:  #FF4B6E;
+  --c-dark:     #D93058;
+  --c-gold:     #C9956C;
+  --c-text:     #2D0A1A;
+  --c-muted:    #9E6B7D;
+  --c-glass:    rgba(255, 255, 255, 0.72);
+  --c-border:   rgba(255, 75, 110, 0.18);
+  --c-shadow:   0 8px 32px rgba(255, 75, 110, 0.18);
+  --c-gradient: linear-gradient(135deg, #FF4B6E 0%, #C9956C 100%);
+  --c-success:  #10b981;
+  --c-warn:     #f59e0b;
 }
 
-.ellipsis-cell {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  vertical-align: middle;
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  margin: 0;
+  min-height: 100vh;
 }
 
-.table.nowrap td,
-.table.nowrap th {
-  white-space: nowrap;
+/* Override Bootstrap container to full-bleed Cupid layout */
+main.container {
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
-
-.modal-dialog.modal-dialog-centered.auto-width-modal {
-    max-width: 85vw !important; /* remove Bootstrap cap */
-    margin: 1.75rem auto;
+/* Glassmorphism utility */
+.glass {
+  background: var(--c-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--c-border);
+  border-radius: 18px;
+  box-shadow: var(--c-shadow);
 }
 
-.renewals {
-    margin: 20px;
+/* Gradient text */
+.gradient-text {
+  background: var(--c-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 999px; }
+
+/* table legacy */
+.table.table-fixed { table-layout: fixed; width: 100%; }
+.ellipsis-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: middle; }
+.table.nowrap td, .table.nowrap th { white-space: nowrap; }
+.modal-dialog.modal-dialog-centered.auto-width-modal { max-width: 85vw !important; margin: 1.75rem auto; }
+.renewals { margin: 20px; }
 .deadline-passed::after {
-  content: "\2757"; /* exclamation */
+  content: "\2757";
   color: #e74c3c;
   font-weight: 700;
   display: inline-block;
-  margin-left: 0px;
-  padding-left: 0px;
+  margin-left: 0;
   vertical-align: top;
   pointer-events: none;
 }
