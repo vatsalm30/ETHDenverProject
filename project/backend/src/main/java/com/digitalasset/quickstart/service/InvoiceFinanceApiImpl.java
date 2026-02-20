@@ -26,7 +26,9 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.concurrent.CompletableFuture;
 import org.openapitools.jackson.nullable.JsonNullable;
@@ -34,6 +36,7 @@ import org.openapitools.model.UserProfileDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import org.openapitools.model.*;
@@ -103,6 +106,26 @@ public class InvoiceFinanceApiImpl implements
     private final java.util.concurrent.ConcurrentHashMap<String, Instant> auctionEndTimes =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** Company username that owns each financed invoice (fiCid → companyUsername). Persisted. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> financedInvoiceCompany =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Winning institution username for each financed invoice (fiCid → winnerUsername). Persisted. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> financedInvoiceWinner =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Winning institution username for each bank ownership (boCid → winnerUsername). Persisted. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> bankOwnershipWinner =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Company username for each paid invoice (paidCid → companyUsername). Persisted. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> paidInvoiceCompany =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Winning institution username for each paid invoice (paidCid → winnerUsername). Persisted. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> paidInvoiceWinner =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private final LedgerApi ledger;
     private final AuthUtils auth;
     private final DamlRepository damlRepository;
@@ -116,6 +139,9 @@ public class InvoiceFinanceApiImpl implements
 
     @Value("${anthropic.api-key:}")
     private String anthropicApiKey;
+
+    @Value("${gemini.api-key:}")
+    private String geminiApiKey;
 
     @Autowired
     public InvoiceFinanceApiImpl(LedgerApi ledger, AuthUtils auth, DamlRepository damlRepository,
@@ -136,16 +162,20 @@ public class InvoiceFinanceApiImpl implements
         try {
             jdbcTemplate.execute(
                 "CREATE TABLE IF NOT EXISTS auction_end_times (" +
-                "  contract_id TEXT PRIMARY KEY," +
-                "  end_epoch_sec BIGINT NOT NULL" +
-                ")"
-            );
+                "  contract_id TEXT PRIMARY KEY, end_epoch_sec BIGINT NOT NULL)");
             jdbcTemplate.execute(
                 "CREATE TABLE IF NOT EXISTS auction_owners (" +
-                "  contract_id TEXT PRIMARY KEY," +
-                "  username TEXT NOT NULL" +
-                ")"
-            );
+                "  contract_id TEXT PRIMARY KEY, username TEXT NOT NULL)");
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS fi_owners (" +
+                "  contract_id TEXT PRIMARY KEY, company_username TEXT, winner_username TEXT)");
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS bo_winners (" +
+                "  contract_id TEXT PRIMARY KEY, winner_username TEXT NOT NULL)");
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS paid_owners (" +
+                "  contract_id TEXT PRIMARY KEY, company_username TEXT, winner_username TEXT)");
+
             // Load into memory
             jdbcTemplate.query("SELECT contract_id, end_epoch_sec FROM auction_end_times", rs -> {
                 auctionEndTimes.put(rs.getString("contract_id"),
@@ -154,8 +184,22 @@ public class InvoiceFinanceApiImpl implements
             jdbcTemplate.query("SELECT contract_id, username FROM auction_owners", rs -> {
                 auctionOwner.put(rs.getString("contract_id"), rs.getString("username"));
             });
-            logger.info("initAuctionStore: loaded {} end times, {} owners",
-                    auctionEndTimes.size(), auctionOwner.size());
+            jdbcTemplate.query("SELECT contract_id, company_username, winner_username FROM fi_owners", rs -> {
+                String cid = rs.getString("contract_id");
+                if (rs.getString("company_username") != null) financedInvoiceCompany.put(cid, rs.getString("company_username"));
+                if (rs.getString("winner_username") != null) financedInvoiceWinner.put(cid, rs.getString("winner_username"));
+            });
+            jdbcTemplate.query("SELECT contract_id, winner_username FROM bo_winners", rs -> {
+                bankOwnershipWinner.put(rs.getString("contract_id"), rs.getString("winner_username"));
+            });
+            jdbcTemplate.query("SELECT contract_id, company_username, winner_username FROM paid_owners", rs -> {
+                String cid = rs.getString("contract_id");
+                if (rs.getString("company_username") != null) paidInvoiceCompany.put(cid, rs.getString("company_username"));
+                if (rs.getString("winner_username") != null) paidInvoiceWinner.put(cid, rs.getString("winner_username"));
+            });
+            logger.info("initAuctionStore: loaded {} end times, {} auction owners, {} FI owners, {} BO winners, {} paid owners",
+                    auctionEndTimes.size(), auctionOwner.size(),
+                    financedInvoiceCompany.size(), bankOwnershipWinner.size(), paidInvoiceCompany.size());
         } catch (Exception e) {
             logger.warn("initAuctionStore: failed to initialize persistence tables — {}", e.getMessage());
         }
@@ -175,75 +219,110 @@ public class InvoiceFinanceApiImpl implements
             org.openapitools.model.ParseInvoiceRequest req) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                if (anthropicApiKey == null || anthropicApiKey.isBlank()) {
-                    // Return a mock response when no API key is configured
-                    return ResponseEntity.ok(mockParsedInvoice());
+                // Prefer Gemini; fall back to Anthropic (legacy); fall back to mock
+                if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+                    return ResponseEntity.ok(parseWithGemini(req));
                 }
-
-                String prompt = "Extract invoice data from this image. Return ONLY valid JSON with these fields: " +
-                        "{\"invoiceNumber\":\"string\",\"vendorName\":\"string\",\"buyerName\":\"string\"," +
-                        "\"amount\":number,\"issueDate\":\"YYYY-MM-DD\",\"dueDate\":\"YYYY-MM-DD\"," +
-                        "\"description\":\"string\",\"confidence\":number_0_to_1}. " +
-                        "If a field is not visible, use null. Do not include any text outside the JSON.";
-
-                String requestBody = objectMapper.writeValueAsString(new java.util.LinkedHashMap<>() {{
-                    put("model", "claude-haiku-4-5-20251001");
-                    put("max_tokens", 512);
-                    put("messages", List.of(new java.util.LinkedHashMap<>() {{
-                        put("role", "user");
-                        put("content", List.of(
-                                new java.util.LinkedHashMap<>() {{
-                                    put("type", "image");
-                                    put("source", new java.util.LinkedHashMap<>() {{
-                                        put("type", "base64");
-                                        put("media_type", req.getMimeType());
-                                        put("data", req.getFileBase64());
-                                    }});
-                                }},
-                                new java.util.LinkedHashMap<>() {{
-                                    put("type", "text");
-                                    put("text", prompt);
-                                }}
-                        ));
-                    }}));
-                }});
-
-                HttpRequest httpReq = HttpRequest.newBuilder()
-                        .uri(URI.create("https://api.anthropic.com/v1/messages"))
-                        .header("Content-Type", "application/json")
-                        .header("x-api-key", anthropicApiKey)
-                        .header("anthropic-version", "2023-06-01")
-                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                        .build();
-
-                HttpResponse<String> httpResp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-                JsonNode root = objectMapper.readTree(httpResp.body());
-                String text = root.path("content").get(0).path("text").asText();
-
-                // Strip markdown code fences if present
-                text = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
-                JsonNode parsed = objectMapper.readTree(text);
-
-                ParsedInvoiceDto dto = new ParsedInvoiceDto();
-                if (!parsed.path("invoiceNumber").isNull()) dto.setInvoiceNumber(parsed.path("invoiceNumber").asText());
-                if (!parsed.path("vendorName").isNull()) dto.setVendorName(parsed.path("vendorName").asText());
-                if (!parsed.path("buyerName").isNull()) dto.setBuyerName(parsed.path("buyerName").asText());
-                if (!parsed.path("amount").isNull() && parsed.path("amount").isNumber())
-                    dto.setAmount(parsed.path("amount").asDouble());
-                if (!parsed.path("issueDate").isNull()) {
-                    try { dto.setIssueDate(LocalDate.parse(parsed.path("issueDate").asText())); } catch (Exception ignored) {}
+                if (anthropicApiKey != null && !anthropicApiKey.isBlank()) {
+                    return ResponseEntity.ok(parseWithAnthropic(req));
                 }
-                if (!parsed.path("dueDate").isNull()) {
-                    try { dto.setDueDate(LocalDate.parse(parsed.path("dueDate").asText())); } catch (Exception ignored) {}
-                }
-                if (!parsed.path("description").isNull()) dto.setDescription(parsed.path("description").asText());
-                dto.setConfidence(parsed.path("confidence").asDouble(0.8));
-                return ResponseEntity.ok(dto);
+                return ResponseEntity.ok(mockParsedInvoice());
             } catch (Exception e) {
                 logger.error("Invoice parse failed", e);
                 return ResponseEntity.ok(mockParsedInvoice());
             }
         });
+    }
+
+    private ParsedInvoiceDto parseWithGemini(org.openapitools.model.ParseInvoiceRequest req) throws Exception {
+        String prompt = "Extract invoice data from this image. Return ONLY valid JSON with these exact fields: " +
+                "{\"invoiceNumber\":\"string\",\"vendorName\":\"string\",\"buyerName\":\"string\"," +
+                "\"amount\":number,\"issueDate\":\"YYYY-MM-DD\",\"dueDate\":\"YYYY-MM-DD\"," +
+                "\"description\":\"string\",\"confidence\":number_0_to_1}. " +
+                "Use null for any field not visible. No text outside the JSON.";
+
+        var part1 = Map.of("text", prompt);
+        var inlineData = Map.of("mime_type", req.getMimeType(), "data", req.getFileBase64());
+        var part2 = Map.of("inline_data", inlineData);
+        var content = Map.of("parts", List.of(part1, part2));
+        var body = Map.of("contents", List.of(content));
+
+        String requestBody = objectMapper.writeValueAsString(body);
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey;
+
+        HttpRequest httpReq = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+
+        HttpResponse<String> httpResp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
+        JsonNode root = objectMapper.readTree(httpResp.body());
+        String text = root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
+        text = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+        return parsedInvoiceDtoFromJson(objectMapper.readTree(text));
+    }
+
+    private ParsedInvoiceDto parseWithAnthropic(org.openapitools.model.ParseInvoiceRequest req) throws Exception {
+        String prompt = "Extract invoice data from this image. Return ONLY valid JSON with these fields: " +
+                "{\"invoiceNumber\":\"string\",\"vendorName\":\"string\",\"buyerName\":\"string\"," +
+                "\"amount\":number,\"issueDate\":\"YYYY-MM-DD\",\"dueDate\":\"YYYY-MM-DD\"," +
+                "\"description\":\"string\",\"confidence\":number_0_to_1}. " +
+                "If a field is not visible, use null. Do not include any text outside the JSON.";
+
+        String requestBody = objectMapper.writeValueAsString(new java.util.LinkedHashMap<>() {{
+            put("model", "claude-haiku-4-5-20251001");
+            put("max_tokens", 512);
+            put("messages", List.of(new java.util.LinkedHashMap<>() {{
+                put("role", "user");
+                put("content", List.of(
+                        new java.util.LinkedHashMap<>() {{
+                            put("type", "image");
+                            put("source", new java.util.LinkedHashMap<>() {{
+                                put("type", "base64");
+                                put("media_type", req.getMimeType());
+                                put("data", req.getFileBase64());
+                            }});
+                        }},
+                        new java.util.LinkedHashMap<>() {{
+                            put("type", "text");
+                            put("text", prompt);
+                        }}
+                ));
+            }}));
+        }});
+
+        HttpRequest httpReq = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.anthropic.com/v1/messages"))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", anthropicApiKey)
+                .header("anthropic-version", "2023-06-01")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+
+        HttpResponse<String> httpResp = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
+        JsonNode root = objectMapper.readTree(httpResp.body());
+        String text = root.path("content").get(0).path("text").asText();
+        text = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+        return parsedInvoiceDtoFromJson(objectMapper.readTree(text));
+    }
+
+    private ParsedInvoiceDto parsedInvoiceDtoFromJson(JsonNode parsed) {
+        ParsedInvoiceDto dto = new ParsedInvoiceDto();
+        if (!parsed.path("invoiceNumber").isNull()) dto.setInvoiceNumber(parsed.path("invoiceNumber").asText());
+        if (!parsed.path("vendorName").isNull()) dto.setVendorName(parsed.path("vendorName").asText());
+        if (!parsed.path("buyerName").isNull()) dto.setBuyerName(parsed.path("buyerName").asText());
+        if (!parsed.path("amount").isNull() && parsed.path("amount").isNumber())
+            dto.setAmount(parsed.path("amount").asDouble());
+        if (!parsed.path("issueDate").isNull()) {
+            try { dto.setIssueDate(LocalDate.parse(parsed.path("issueDate").asText())); } catch (Exception ignored) {}
+        }
+        if (!parsed.path("dueDate").isNull()) {
+            try { dto.setDueDate(LocalDate.parse(parsed.path("dueDate").asText())); } catch (Exception ignored) {}
+        }
+        if (!parsed.path("description").isNull()) dto.setDescription(parsed.path("description").asText());
+        dto.setConfidence(parsed.path("confidence").asDouble(0.8));
+        return dto;
     }
 
     private ParsedInvoiceDto mockParsedInvoice() {
@@ -264,9 +343,10 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<List<InvoiceDto>>> listInvoices() {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "listInvoices");
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
-            String username = currentUsername();
             // Each user only sees their own pending invoices (username-keyed isolation)
             var list = pendingInvoices.values().stream()
                     .filter(dto -> username != null && username.equals(invoiceOwner.get(dto.getContractId())))
@@ -281,6 +361,8 @@ public class InvoiceFinanceApiImpl implements
             String commandId,
             CreateInvoiceRequest req
     ) {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "createInvoice", "commandId", commandId, "invoiceId", req.getInvoiceId());
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
             String pseudoId = java.util.UUID.randomUUID().toString();
@@ -298,7 +380,6 @@ public class InvoiceFinanceApiImpl implements
             dto.setStatus(InvoiceDto.StatusEnum.CONFIRMED);
             pendingInvoices.put(pseudoId, dto);
             // Record who created this invoice for multi-tenant isolation
-            String username = currentUsername();
             if (username != null) invoiceOwner.put(pseudoId, username);
             logger.info("createInvoice stored in-memory: pseudoId={} invoiceId={} owner={}", pseudoId, req.getInvoiceId(), username);
             return CompletableFuture.completedFuture(
@@ -309,9 +390,10 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<Void>> deleteInvoice(String contractId, String commandId) {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "deleteInvoice", "contractId", contractId, "commandId", commandId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
-            String username = currentUsername();
             String owner = invoiceOwner.get(contractId);
             if (owner != null && !owner.equals(username)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this invoice");
@@ -343,6 +425,8 @@ public class InvoiceFinanceApiImpl implements
             String commandId,
             StartAuctionRequest req
     ) {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "startAuction", "contractId", contractId, "commandId", commandId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
             var invoiceDto = pendingInvoices.get(contractId);
@@ -352,7 +436,6 @@ public class InvoiceFinanceApiImpl implements
             }
 
             // Ownership check — only the company that created this invoice can auction it
-            final String username = currentUsername();
             String owner = invoiceOwner.get(contractId);
             if (owner != null && !owner.equals(username)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this invoice");
@@ -444,12 +527,13 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<List<FinancingAuctionDto>>> listAuctions() {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
+        UserProfileDto.TypeEnum profileType = ProfileApiImpl.getProfileType(username);
+        boolean isCompany = UserProfileDto.TypeEnum.COMPANY.equals(profileType);
         var ctx = tracingCtx(logger, "listAuctions");
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findActiveAuctions(party).thenApplyAsync(contracts -> {
-                    String username = currentUsername();
-                    UserProfileDto.TypeEnum profileType = ProfileApiImpl.getProfileType(username);
-                    boolean isCompany = UserProfileDto.TypeEnum.COMPANY.equals(profileType);
 
                     return ResponseEntity.ok(contracts.stream()
                             .filter(c -> {
@@ -543,10 +627,11 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<Void>> cancelAuction(String contractId, String commandId) {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "cancelAuction", "contractId", contractId, "commandId", commandId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
             // Ownership check
-            String username = currentUsername();
             String owner = auctionOwner.get(contractId);
             if (owner != null && !owner.equals(username)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this auction");
@@ -568,16 +653,12 @@ public class InvoiceFinanceApiImpl implements
     @WithSpan
     public CompletableFuture<ResponseEntity<PlaceBidResult>> placeBid(
             String contractId, String commandId, PlaceBidRequest placeBidRequest) {
+        // Use username as the bid key so each institution user has isolated bid state
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "placeBid", "contractId", contractId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findAuctionById(contractId).thenApplyAsync(opt -> {
                     var contract = ensurePresent(opt, "Auction not found: %s", contractId);
-                    boolean eligible = contract.payload.getEligibleBanks.stream()
-                            .anyMatch(p -> p.getParty.equals(party));
-                    if (!eligible) {
-                        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                                "Party " + party + " is not eligible to bid in auction " + contractId);
-                    }
                     if (!"OPEN".equals(contract.payload.getStatus)) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is not OPEN");
                     }
@@ -586,9 +667,10 @@ public class InvoiceFinanceApiImpl implements
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                                 "offeredRate must be between 0 and 100");
                     }
-                    PlaceBidResult result = auctionBidStore.placeBid(contractId, party, rate);
-                    logger.info("placeBid: auctionId={} party={} rate={} winning={}",
-                            contractId, party, rate, result.getIsCurrentBestBid());
+                    String bidKey = username != null ? username : party;
+                    PlaceBidResult result = auctionBidStore.placeBid(contractId, bidKey, rate);
+                    logger.info("placeBid: auctionId={} user={} rate={} winning={}",
+                            contractId, bidKey, rate, result.getIsCurrentBestBid());
                     return ResponseEntity.ok(result);
                 })
         ));
@@ -597,21 +679,25 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<BidStatusDto>> getMyBidStatus(String contractId) {
+        // Use username as the bid key so each institution user sees only their own bid
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "getMyBidStatus", "contractId", contractId);
-        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                CompletableFuture.completedFuture(
-                        ResponseEntity.ok(auctionBidStore.getBidStatus(contractId, party)))
-        ));
+        return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
+            String bidKey = username != null ? username : party;
+            return CompletableFuture.completedFuture(
+                    ResponseEntity.ok(auctionBidStore.getBidStatus(contractId, bidKey)));
+        }));
     }
 
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<CloseAuctionResult>> closeAuction(
             String contractId, String commandId) {
+        // Capture on HTTP thread — SecurityContextHolder is ThreadLocal and won't propagate into async pool
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "closeAuction", "contractId", contractId, "commandId", commandId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
             // Ownership check — username-based since all users share the same Daml party
-            String username = currentUsername();
             String owner = auctionOwner.get(contractId);
             if (owner != null && !owner.equals(username)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -634,7 +720,7 @@ public class InvoiceFinanceApiImpl implements
 
                 AuctionBidStore.WinnerInfo winner = winnerOpt.get();
                 logger.info("closeAuction: settling auction {} with winner={} rate={}",
-                        contractId, winner.partyId(), winner.rate());
+                        contractId, winner.username(), winner.rate());
 
                 double purchaseAmount = auctionContract.payload.getAmount.doubleValue()
                         * winner.rate() / 100.0;
@@ -642,34 +728,56 @@ public class InvoiceFinanceApiImpl implements
                 String archiveCommandId = commandId + "-archive";
                 return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, archiveCommandId)
                         .thenComposeAsync(v -> {
-                            var winningBid = new WinningBid(
-                                    auctionContract.payload.getOperator,
-                                    auctionContract.payload.getSupplier,
-                                    auctionContract.payload.getBuyer,
-                                    new Party(winner.partyId()),
+                            // WinningBid_Settle has archive-self bug in deployed @b2fe96ff —
+                            // bypass it entirely: create FinancedInvoice + BankOwnership directly.
+                            // FinancedInvoice requires signatory operator+supplier+buyer+bank;
+                            // in this demo all users share one party so we use operator for all four.
+                            var op = auctionContract.payload.getOperator;
+                            var financedInvoice = new FinancedInvoice(
+                                    op, op, op, op,
                                     auctionContract.payload.getInvoiceId,
                                     auctionContract.payload.getAmount,
                                     auctionContract.payload.getDescription,
                                     auctionContract.payload.getDueDate,
+                                    "ACTIVE",
+                                    false,
+                                    BigDecimal.ZERO
+                            );
+                            var bankOwnership = new BankOwnership(
+                                    op, op,
+                                    auctionContract.payload.getInvoiceId,
                                     BigDecimal.valueOf(winner.rate()),
                                     BigDecimal.valueOf(purchaseAmount),
-                                    "PENDING_SETTLEMENT"
+                                    auctionContract.payload.getAmount
                             );
-                            String settleCommandId = commandId + "-settle";
-                            return ledger.createAndExercise(winningBid, new WinningBid_Settle(), settleCommandId);
+                            String fiCommandId = commandId + "-fi";
+                            String boCommandId = commandId + "-bo";
+                            return ledger.createAndGetId(financedInvoice, fiCommandId)
+                                    .thenComposeAsync(fiCid ->
+                                            ledger.createAndGetId(bankOwnership, boCommandId)
+                                                    .thenApply(boCid -> new String[]{
+                                                            fiCid.getContractId, boCid.getContractId}));
                         })
-                        .thenApply(settled -> {
+                        .thenApply(cids -> {
+                            String fiCidStr = cids[0];
+                            String boCidStr = cids[1];
                             cleanupAuction(contractId);
 
-                            String displayName = ProfileApiImpl.getDisplayName(winner.partyId());
+                            // Store ownership for per-user filtering
+                            financedInvoiceCompany.put(fiCidStr, username);
+                            financedInvoiceWinner.put(fiCidStr, winner.username());
+                            bankOwnershipWinner.put(boCidStr, winner.username());
+                            persistFiOwner(fiCidStr, username, winner.username());
+                            persistBoWinner(boCidStr, winner.username());
+
+                            String displayName = ProfileApiImpl.getDisplayNameByUsername(winner.username());
 
                             var result = new CloseAuctionResult();
                             result.setNoWinner(false);
-                            result.setWinningInstitutionPartyId(JsonNullable.of(winner.partyId()));
+                            result.setWinningInstitutionPartyId(JsonNullable.of(winner.username()));
                             result.setWinningInstitutionDisplayName(JsonNullable.of(displayName));
                             result.setWinningRate(JsonNullable.of(winner.rate()));
-                            result.setFinancedInvoiceContractId(JsonNullable.of(
-                                    settled.getFinancedInvoiceId.getContractId));
+                            result.setFinancedInvoiceContractId(JsonNullable.of(fiCidStr));
                             result.setPurchaseAmount(JsonNullable.of(purchaseAmount));
                             return ResponseEntity.ok(result);
                         });
@@ -682,10 +790,20 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<List<FinancedInvoiceDto>>> listFinancedInvoices() {
+        String username = currentUsername();
+        UserProfileDto.TypeEnum profileType = ProfileApiImpl.getProfileType(username);
+        boolean isCompany = UserProfileDto.TypeEnum.COMPANY.equals(profileType);
         var ctx = tracingCtx(logger, "listFinancedInvoices");
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findActiveFinancedInvoices(party).thenApplyAsync(contracts ->
-                        ResponseEntity.ok(contracts.stream().map(this::toFinancedInvoiceDto).toList())
+                        ResponseEntity.ok(contracts.stream()
+                                .filter(c -> {
+                                    String cid = c.contractId.getContractId;
+                                    if (isCompany) return username.equals(financedInvoiceCompany.get(cid));
+                                    else return username != null && username.equals(financedInvoiceWinner.get(cid));
+                                })
+                                .map(this::toFinancedInvoiceDto)
+                                .toList())
                 )
         ));
     }
@@ -694,13 +812,38 @@ public class InvoiceFinanceApiImpl implements
     @WithSpan
     public CompletableFuture<ResponseEntity<PaidInvoiceDto>> payFinancedInvoice(
             String contractId, String commandId) {
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "payFinancedInvoice", "contractId", contractId, "commandId", commandId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findFinancedInvoiceById(contractId).thenComposeAsync(opt -> {
                     var contract = ensurePresent(opt, "FinancedInvoice not found: %s", contractId);
-                    var choice = new FinancedInvoice_Pay();
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
+                    // FinancedInvoice_Pay has archive-self bug in deployed @b2fe96ff —
+                    // bypass: archive FinancedInvoice + create PaidInvoice directly.
+                    // PaidInvoice requires signatory operator+supplier+buyer+bank;
+                    // use operator for all four since demo shares one Canton party.
+                    String archiveCommandId = commandId + "-archive";
+                    return ledger.archive(contract.contractId, FinancedInvoice.TEMPLATE_ID, archiveCommandId)
+                            .thenComposeAsync(v -> {
+                                var op = contract.payload.getOperator;
+                                var paidInvoice = new PaidInvoice(
+                                        op, op, op, op,
+                                        contract.payload.getInvoiceId,
+                                        contract.payload.getAmount,
+                                        contract.payload.getDescription,
+                                        contract.payload.isSprintBoostActive,
+                                        contract.payload.isSprintBoostActive
+                                                ? contract.payload.getSprintBoostBounty
+                                                : BigDecimal.ZERO
+                                );
+                                return ledger.createAndGetId(paidInvoice, commandId + "-paid");
+                            })
                             .thenApply(paidCid -> {
+                                // Migrate ownership from FinancedInvoice → PaidInvoice
+                                String compOwner = financedInvoiceCompany.remove(contractId);
+                                String winOwner = financedInvoiceWinner.remove(contractId);
+                                if (compOwner != null) paidInvoiceCompany.put(paidCid.getContractId, compOwner);
+                                if (winOwner != null) paidInvoiceWinner.put(paidCid.getContractId, winOwner);
+                                persistPaidOwner(paidCid.getContractId, compOwner, winOwner);
                                 var dto = new PaidInvoiceDto();
                                 dto.setContractId(paidCid.getContractId);
                                 dto.setOperator(contract.payload.getOperator.getParty);
@@ -729,10 +872,32 @@ public class InvoiceFinanceApiImpl implements
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findFinancedInvoiceById(contractId).thenComposeAsync(opt -> {
                     var contract = ensurePresent(opt, "FinancedInvoice not found: %s", contractId);
-                    var choice = new FinancedInvoice_ActivateSprintBoost(
-                            BigDecimal.valueOf(req.getBountyAmount()));
-                    return ledger.exerciseAndGetResult(contract.contractId, choice, commandId)
+                    // FinancedInvoice_ActivateSprintBoost may have archive-self bug in @b2fe96ff —
+                    // bypass: archive old FinancedInvoice + create new one with sprint boost active.
+                    String archiveCommandId = commandId + "-archive";
+                    return ledger.archive(contract.contractId, FinancedInvoice.TEMPLATE_ID, archiveCommandId)
+                            .thenComposeAsync(v -> {
+                                var op = contract.payload.getOperator;
+                                var updated = new FinancedInvoice(
+                                        op, op, op, op,
+                                        contract.payload.getInvoiceId,
+                                        contract.payload.getAmount,
+                                        contract.payload.getDescription,
+                                        contract.payload.getDueDate,
+                                        "SPRINT_BOOST_ACTIVE",
+                                        true,
+                                        BigDecimal.valueOf(req.getBountyAmount())
+                                );
+                                return ledger.createAndGetId(updated, commandId + "-new");
+                            })
                             .thenApply(newCid -> {
+                                // Migrate FI ownership maps from old contract ID to new one
+                                String compOwner = financedInvoiceCompany.remove(contractId);
+                                String winOwner = financedInvoiceWinner.remove(contractId);
+                                if (compOwner != null) financedInvoiceCompany.put(newCid.getContractId, compOwner);
+                                if (winOwner != null) financedInvoiceWinner.put(newCid.getContractId, winOwner);
+                                if (compOwner != null || winOwner != null)
+                                    persistFiOwner(newCid.getContractId, compOwner, winOwner);
                                 var dto = toFinancedInvoiceDto(contract);
                                 dto.setContractId(newCid.getContractId);
                                 dto.setSprintBoostActive(true);
@@ -749,20 +914,24 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<List<BankOwnershipDto>>> listBankOwnerships() {
+        String username = currentUsername();
         var ctx = tracingCtx(logger, "listBankOwnerships");
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findActiveBankOwnerships(party).thenApplyAsync(contracts ->
-                        ResponseEntity.ok(contracts.stream().map(c -> {
-                            var dto = new BankOwnershipDto();
-                            dto.setContractId(c.contractId.getContractId);
-                            dto.setOperator(c.payload.getOperator.getParty);
-                            dto.setBank(c.payload.getBank.getParty);
-                            dto.setInvoiceId(c.payload.getInvoiceId);
-                            dto.setPurchaseRate(c.payload.getPurchaseRate.doubleValue());
-                            dto.setPurchaseAmount(c.payload.getPurchaseAmount.doubleValue());
-                            dto.setFaceValue(c.payload.getFaceValue.doubleValue());
-                            return dto;
-                        }).toList())
+                        ResponseEntity.ok(contracts.stream()
+                                .filter(c -> username != null && username.equals(
+                                        bankOwnershipWinner.get(c.contractId.getContractId)))
+                                .map(c -> {
+                                    var dto = new BankOwnershipDto();
+                                    dto.setContractId(c.contractId.getContractId);
+                                    dto.setOperator(c.payload.getOperator.getParty);
+                                    dto.setBank(c.payload.getBank.getParty);
+                                    dto.setInvoiceId(c.payload.getInvoiceId);
+                                    dto.setPurchaseRate(c.payload.getPurchaseRate.doubleValue());
+                                    dto.setPurchaseAmount(c.payload.getPurchaseAmount.doubleValue());
+                                    dto.setFaceValue(c.payload.getFaceValue.doubleValue());
+                                    return dto;
+                                }).toList())
                 )
         ));
     }
@@ -772,25 +941,139 @@ public class InvoiceFinanceApiImpl implements
     @Override
     @WithSpan
     public CompletableFuture<ResponseEntity<List<PaidInvoiceDto>>> listPaidInvoices() {
+        String username = currentUsername();
+        UserProfileDto.TypeEnum profileType = ProfileApiImpl.getProfileType(username);
+        boolean isCompany = UserProfileDto.TypeEnum.COMPANY.equals(profileType);
         var ctx = tracingCtx(logger, "listPaidInvoices");
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
                 damlRepository.findPaidInvoices(party).thenApplyAsync(contracts ->
-                        ResponseEntity.ok(contracts.stream().map(c -> {
-                            var dto = new PaidInvoiceDto();
-                            dto.setContractId(c.contractId.getContractId);
-                            dto.setOperator(c.payload.getOperator.getParty);
-                            dto.setSupplier(c.payload.getSupplier.getParty);
-                            dto.setBuyer(c.payload.getBuyer.getParty);
-                            dto.setBank(c.payload.getBank.getParty);
-                            dto.setInvoiceId(c.payload.getInvoiceId);
-                            dto.setAmount(c.payload.getAmount.doubleValue());
-                            dto.setDescription(c.payload.getDescription);
-                            dto.setSprintBoosted(c.payload.isSprintBoosted);
-                            dto.setBountyPaid(c.payload.getBountyPaid.doubleValue());
-                            return dto;
-                        }).toList())
+                        ResponseEntity.ok(contracts.stream()
+                                .filter(c -> {
+                                    String cid = c.contractId.getContractId;
+                                    if (isCompany) return username.equals(paidInvoiceCompany.get(cid));
+                                    else return username != null && username.equals(paidInvoiceWinner.get(cid));
+                                })
+                                .map(c -> {
+                                    var dto = new PaidInvoiceDto();
+                                    dto.setContractId(c.contractId.getContractId);
+                                    dto.setOperator(c.payload.getOperator.getParty);
+                                    dto.setSupplier(c.payload.getSupplier.getParty);
+                                    dto.setBuyer(c.payload.getBuyer.getParty);
+                                    dto.setBank(c.payload.getBank.getParty);
+                                    dto.setInvoiceId(c.payload.getInvoiceId);
+                                    dto.setAmount(c.payload.getAmount.doubleValue());
+                                    dto.setDescription(c.payload.getDescription);
+                                    dto.setSprintBoosted(c.payload.isSprintBoosted);
+                                    dto.setBountyPaid(c.payload.getBountyPaid.doubleValue());
+                                    return dto;
+                                }).toList())
                 )
         ));
+    }
+
+    // ─── Scheduled Auto-Close ─────────────────────────────────────────────────
+
+    /**
+     * Every 60 seconds: auto-close any auction whose end time has passed.
+     * Handles early-close (company triggers before end date) OR natural expiry.
+     */
+    @Scheduled(fixedDelay = 60000)
+    public void checkExpiredAuctions() {
+        Instant now = Instant.now();
+        List<String> expired = new ArrayList<>();
+        auctionEndTimes.forEach((cid, endTime) -> {
+            if (now.isAfter(endTime)) expired.add(cid);
+        });
+        for (String contractId : expired) {
+            // Remove eagerly so subsequent scheduler ticks won't pick it up again
+            if (auctionEndTimes.remove(contractId) != null) {
+                logger.info("checkExpiredAuctions: auto-closing expired auction {}", contractId);
+                autoCloseAuction(contractId);
+            }
+        }
+    }
+
+    /** Settles (or archives) a single auction without an HTTP request context. */
+    private void autoCloseAuction(String contractId) {
+        String commandId = "auto-close-" + contractId.substring(0, Math.min(8, contractId.length()))
+                + "-" + System.currentTimeMillis();
+
+        damlRepository.findAuctionById(contractId).thenComposeAsync(opt -> {
+            if (opt.isEmpty()) {
+                logger.warn("autoCloseAuction: auction {} not found on ledger, cleaning up", contractId);
+                cleanupAuction(contractId);
+                return CompletableFuture.completedFuture(null);
+            }
+
+            var auctionContract = opt.get();
+            var winnerOpt = auctionBidStore.getWinner(contractId);
+
+            if (winnerOpt.isEmpty()) {
+                logger.info("autoCloseAuction: no bids for {}, archiving", contractId);
+                return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, commandId)
+                        .thenApply(v -> {
+                            cleanupAuction(contractId);
+                            logger.info("autoCloseAuction: archived (no winner) {}", contractId);
+                            return (Void) null;
+                        });
+            }
+
+            AuctionBidStore.WinnerInfo winner = winnerOpt.get();
+            String companyUsername = auctionOwner.get(contractId);
+            logger.info("autoCloseAuction: settling {} with winner={} rate={}",
+                    contractId, winner.username(), winner.rate());
+            double purchaseAmount = auctionContract.payload.getAmount.doubleValue() * winner.rate() / 100.0;
+
+            String archiveCommandId = commandId + "-archive";
+            return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, archiveCommandId)
+                    .thenComposeAsync(v -> {
+                        // WinningBid_Settle has archive-self bug in deployed @b2fe96ff —
+                        // bypass it entirely: create FinancedInvoice + BankOwnership directly.
+                        // FinancedInvoice requires signatory operator+supplier+buyer+bank;
+                        // in this demo all users share one party so we use operator for all four.
+                        var op = auctionContract.payload.getOperator;
+                        var financedInvoice = new FinancedInvoice(
+                                op, op, op, op,
+                                auctionContract.payload.getInvoiceId,
+                                auctionContract.payload.getAmount,
+                                auctionContract.payload.getDescription,
+                                auctionContract.payload.getDueDate,
+                                "ACTIVE",
+                                false,
+                                BigDecimal.ZERO
+                        );
+                        var bankOwnership = new BankOwnership(
+                                op, op,
+                                auctionContract.payload.getInvoiceId,
+                                BigDecimal.valueOf(winner.rate()),
+                                BigDecimal.valueOf(purchaseAmount),
+                                auctionContract.payload.getAmount
+                        );
+                        String fiCommandId = commandId + "-fi";
+                        String boCommandId = commandId + "-bo";
+                        return ledger.createAndGetId(financedInvoice, fiCommandId)
+                                .thenComposeAsync(fiCid ->
+                                        ledger.createAndGetId(bankOwnership, boCommandId)
+                                                .thenApply(boCid -> new String[]{
+                                                        fiCid.getContractId, boCid.getContractId}));
+                    })
+                    .thenApply(cids -> {
+                        String fiCidStr = cids[0];
+                        String boCidStr = cids[1];
+                        cleanupAuction(contractId);
+                        // Store ownership for per-user filtering
+                        if (companyUsername != null) financedInvoiceCompany.put(fiCidStr, companyUsername);
+                        financedInvoiceWinner.put(fiCidStr, winner.username());
+                        bankOwnershipWinner.put(boCidStr, winner.username());
+                        persistFiOwner(fiCidStr, companyUsername, winner.username());
+                        persistBoWinner(boCidStr, winner.username());
+                        logger.info("autoCloseAuction: settled {} -> financedInvoice={}", contractId, fiCidStr);
+                        return (Void) null;
+                    });
+        }).exceptionally(e -> {
+            logger.error("autoCloseAuction: failed to auto-close {}: {}", contractId, e.getMessage(), e);
+            return null;
+        });
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -827,6 +1110,39 @@ public class InvoiceFinanceApiImpl implements
                 contractId, username);
         } catch (Exception e) {
             logger.warn("persistAuctionOwner: failed — {}", e.getMessage());
+        }
+    }
+
+    private void persistFiOwner(String contractId, String companyUsername, String winnerUsername) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO fi_owners(contract_id, company_username, winner_username) VALUES(?,?,?) " +
+                "ON CONFLICT(contract_id) DO UPDATE SET company_username=EXCLUDED.company_username, winner_username=EXCLUDED.winner_username",
+                contractId, companyUsername, winnerUsername);
+        } catch (Exception e) {
+            logger.warn("persistFiOwner: failed — {}", e.getMessage());
+        }
+    }
+
+    private void persistBoWinner(String contractId, String winnerUsername) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO bo_winners(contract_id, winner_username) VALUES(?,?) " +
+                "ON CONFLICT(contract_id) DO UPDATE SET winner_username=EXCLUDED.winner_username",
+                contractId, winnerUsername);
+        } catch (Exception e) {
+            logger.warn("persistBoWinner: failed — {}", e.getMessage());
+        }
+    }
+
+    private void persistPaidOwner(String contractId, String companyUsername, String winnerUsername) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO paid_owners(contract_id, company_username, winner_username) VALUES(?,?,?) " +
+                "ON CONFLICT(contract_id) DO UPDATE SET company_username=EXCLUDED.company_username, winner_username=EXCLUDED.winner_username",
+                contractId, companyUsername, winnerUsername);
+        } catch (Exception e) {
+            logger.warn("persistPaidOwner: failed — {}", e.getMessage());
         }
     }
 

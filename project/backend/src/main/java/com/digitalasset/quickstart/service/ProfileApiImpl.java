@@ -67,6 +67,14 @@ public class ProfileApiImpl implements ProfileApi, ProfilesApi {
                 .orElse(partyId);
     }
 
+    /** Returns the display name for a username, or the username itself if no profile is registered. */
+    public static String getDisplayNameByUsername(String username) {
+        if (username == null) return null;
+        UserProfileDto p = profiles.get(username);
+        if (p == null || p.getDisplayName() == null || p.getDisplayName().isBlank()) return username;
+        return p.getDisplayName();
+    }
+
     /** Upserts a profile from registration data, keyed by username (called by SelfRegistrationApiImpl). */
     public static void registerProfile(String username, UserProfileDto profile) {
         profiles.put(username, profile);

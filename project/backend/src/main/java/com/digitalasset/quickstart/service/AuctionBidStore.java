@@ -28,20 +28,20 @@ public class AuctionBidStore {
 
     /** Internal record of bids for one auction. */
     private static class AuctionBids {
-        // Ordered map: partyId → offeredRate (insertion order preserved for tie-breaking)
+        // Ordered map: bidderKey (username) → offeredRate (insertion order for tie-breaking)
         final LinkedHashMap<String, Double> bids = new LinkedHashMap<>();
-        String currentWinnerPartyId = null;
+        String currentWinnerKey = null;
         double currentBestRate = Double.MAX_VALUE;
         final ReentrantLock lock = new ReentrantLock();
 
         void recomputeWinner() {
-            currentWinnerPartyId = null;
+            currentWinnerKey = null;
             currentBestRate = Double.MAX_VALUE;
             // Insertion order means first bidder wins ties
             for (Map.Entry<String, Double> entry : bids.entrySet()) {
                 if (entry.getValue() < currentBestRate) {
                     currentBestRate = entry.getValue();
-                    currentWinnerPartyId = entry.getKey();
+                    currentWinnerKey = entry.getKey();
                 }
             }
         }
@@ -57,19 +57,19 @@ public class AuctionBidStore {
      * Place or update a sealed bid for an institution.
      *
      * @param auctionContractId the Daml contract ID of the FinancingAuction
-     * @param institutionPartyId the bidding institution's Canton party ID
-     * @param offeredRate advance rate e.g. 97.5 means 97.5%
+     * @param bidderKey         the bidder's username (used as unique key per user)
+     * @param offeredRate       advance rate e.g. 97.5 means 97.5%
      * @return PlaceBidResult indicating if this is currently the best bid
      */
-    public PlaceBidResult placeBid(String auctionContractId, String institutionPartyId, double offeredRate) {
+    public PlaceBidResult placeBid(String auctionContractId, String bidderKey, double offeredRate) {
         AuctionBids auctionBids = getOrCreate(auctionContractId);
         auctionBids.lock.lock();
         try {
-            auctionBids.bids.put(institutionPartyId, offeredRate);
+            auctionBids.bids.put(bidderKey, offeredRate);
             auctionBids.recomputeWinner();
 
             PlaceBidResult result = new PlaceBidResult();
-            result.setIsCurrentBestBid(institutionPartyId.equals(auctionBids.currentWinnerPartyId));
+            result.setIsCurrentBestBid(bidderKey.equals(auctionBids.currentWinnerKey));
             result.setCurrentBestRate(auctionBids.currentBestRate);
             return result;
         } finally {
@@ -81,7 +81,7 @@ public class AuctionBidStore {
      * Returns the calling institution's bid status.
      * Only reveals the caller's own rate; never reveals other bidders' rates or identities.
      */
-    public BidStatusDto getBidStatus(String auctionContractId, String institutionPartyId) {
+    public BidStatusDto getBidStatus(String auctionContractId, String bidderKey) {
         AuctionBids auctionBids = auctionBidMap.get(auctionContractId);
         BidStatusDto dto = new BidStatusDto();
 
@@ -93,9 +93,9 @@ public class AuctionBidStore {
 
         auctionBids.lock.lock();
         try {
-            Double myRate = auctionBids.bids.get(institutionPartyId);
+            Double myRate = auctionBids.bids.get(bidderKey);
             dto.setHasBid(myRate != null);
-            dto.setIsWinning(institutionPartyId.equals(auctionBids.currentWinnerPartyId));
+            dto.setIsWinning(bidderKey.equals(auctionBids.currentWinnerKey));
             if (myRate != null) {
                 dto.setMyRate(JsonNullable.of(myRate));
             }
@@ -117,8 +117,8 @@ public class AuctionBidStore {
 
         auctionBids.lock.lock();
         try {
-            if (auctionBids.currentWinnerPartyId == null) return Optional.empty();
-            return Optional.of(new WinnerInfo(auctionBids.currentWinnerPartyId, auctionBids.currentBestRate));
+            if (auctionBids.currentWinnerKey == null) return Optional.empty();
+            return Optional.of(new WinnerInfo(auctionBids.currentWinnerKey, auctionBids.currentBestRate));
         } finally {
             auctionBids.lock.unlock();
         }
@@ -159,6 +159,6 @@ public class AuctionBidStore {
         auctionBidMap.remove(auctionContractId);
     }
 
-    /** Stores the winning institution's party ID and their offered rate. */
-    public record WinnerInfo(String partyId, double rate) {}
+    /** Stores the winning institution's username (bidder key) and their offered rate. */
+    public record WinnerInfo(String username, double rate) {}
 }
