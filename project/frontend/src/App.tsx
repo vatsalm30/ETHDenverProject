@@ -8,6 +8,7 @@ import { ToastProvider } from './stores/toastStore';
 import HomeView from './views/HomeView';
 import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
+import SelectRoleView from './views/SelectRoleView';
 import { UserProvider } from './stores/userStore';
 import Header from './components/Header';
 import ToastNotification from './components/ToastNotification';
@@ -25,9 +26,10 @@ const App: React.FC = () => {
     return (
         <AppProviders>
             <Header />
-            <main className="container mt-4">
+            <main style={{ minHeight: '100vh' }}>
                 <Routes>
                     <Route path="/" element={<HomeView />} />
+                    <Route path="/select-role" element={<SelectRoleView />} />
                     <Route path="/login" element={<LoginView />} />
                     <Route path="/dashboard" element={<DashboardView />} />
                 </Routes>
