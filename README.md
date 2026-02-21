@@ -1,356 +1,485 @@
-Zara
-zaraa2212_82900
-Online
 
-jacob — Yesterday at 12:36 PM
-Checked in.     Meat the check in booth. Hacking.
-jacob — Yesterday at 12:59 PM
-Near*
-manu — Yesterday at 1:50 PM
-Docs.canton.network
-vatsal — Yesterday at 3:42 PM
-https://docs.google.com/document/d/1yQebgfAsQ4nnfQ5UcA3-QFMDjKT3gnNJpmstipqhTio/edit?tab=t.0
-manu — Yesterday at 4:20 PM
-omw back guys took a lot longer than I expected 😭
-jacob — Yesterday at 5:21 PM
-DevFolio:
-Here are the four paragraphs:
+# InvoiceNow — Invoice Financing on Canton Network
 
-**1. The Problem It Solves**
-Invoice financing represents a $3+ trillion global market built on a fundamental structural inefficiency: suppliers who have completed legitimate work and hold confirmed invoices are forced to wait 30, 60, or even 90 days for payment while their capital sits frozen in receivables. This liquidity gap creates cascading operational risk — suppliers cannot pay their own vendors, fund new production, or invest in growth while waiting on buyers to fulfill payment terms. The existing solutions to this problem are fragmented and opaque: traditional factoring companies offer take-it-or-leave-it rates with no competitive transparency, and suppliers have no mechanism to verify whether the terms they receive reflect fair market pricing. Deadline Derby addresses this directly by creating a competitive Dutch auction marketplace where suppliers can sell confirmed invoices immediately, financiers bid in real time for the right to fund those invoices, and the resulting market dynamics produce rates anchored to genuine supply and demand rather than a single intermediary's margin requirements.
+> **ETHDenver Hackathon Project** | Built on the Canton Network Global Synchronizer using Daml smart contracts, ZK proofs, sealed-bid Dutch auctions, and decentralized settlement.
 
-**2. How It Improves Existing Processes**
+---
 
-message.txt
-6 KB
-jacob — Yesterday at 5:37 PM
-Also in the doc @vatsal
-Let me know when you guys are heading back to the hotel?
-jacob — Yesterday at 6:16 PM
-Where
-jacob — Yesterday at 6:40 PM
-Guys I’m leaving I’m sorry
-I’ll see you back at hote
-L
-Ik
-Uber is leaving in 10 minutes if anyone can make it
-vatsal — Yesterday at 6:48 PM
-yeah sure
-vatsal — Yesterday at 8:18 PM
-@jacob we’re back at the hotel
-come down to the lobby
-jacob — Yesterday at 8:20 PM
-Omw
-manu — Yesterday at 9:19 PM
-https://claude.ai/public/artifacts/ed866a60-477c-4137-b5f2-8d74f323b596
-Claude
-Canton Invoice Finance Architecture — Full Technical Guide
-Explore Canton's complete invoice financing system: ZK proofs, trust scoring, sealed-bid auctions, and decentralized settlement on the Canton Network.
-Canton Invoice Finance Architecture — Full Technical Guide
-manu — Yesterday at 9:42 PM
-https://claude.ai/public/artifacts/028239fa-1231-43d1-b5b7-6c777108d83b
-Claude
-canton-f1-ui-v2.html
-canton-f1-ui-v2.html
-canton-f1-ui-v2.html
-jacob — Yesterday at 9:46 PM
-jgutwein@purdue.edu
-Z5ten15q9*
-manu — Yesterday at 9:50 PM
-https://claude.ai/public/artifacts/cf59fbbf-9dff-496e-9e0f-01830ba40b5e
-Claude
-canton-full-ui.html
-canton-full-ui.html
-canton-full-ui.html
-maybe final ui??
-jacob — Yesterday at 10:17 PM
-Image
-manu — 1:07 AM
-https://docs.google.com/document/d/1XfLRzE1fVmOkiE--LJ48gytty3kPVF7EO9bTrjkjRTQ/edit?usp=sharing
-Google Docs
-demo doc
-jacob — 1:39 AM
-Image
-Potential logo
-vatsal — 2:56 AM
-Image
-manu — 3:03 AM
-cd /Users/manasvimeka/ETHDenverProject/zk-bank-service
+## What Is InvoiceNow?
+
+Invoice financing is a **$3+ trillion global market** built on a structural inefficiency: suppliers who have completed legitimate work and hold confirmed invoices are forced to wait **30, 60, or even 90 days** for payment while their capital sits frozen in receivables.
+
+This liquidity gap creates cascading operational risk — suppliers cannot pay their own vendors, fund new production, or invest in growth while waiting on buyers to fulfill payment terms.
+
+**Existing solutions are broken:**
+- Traditional factoring companies offer take-it-or-leave-it rates with zero competitive transparency
+- Suppliers have no mechanism to verify whether the terms they receive reflect fair market pricing
+- The entire system relies on a single intermediary's margin requirements rather than real supply and demand
+
+**InvoiceNow fixes this** by creating a competitive Dutch auction marketplace where:
+1. Suppliers sell confirmed invoices immediately for working capital
+2. Financiers bid in real time for the right to fund those invoices
+3. Market dynamics produce rates anchored to genuine supply and demand — not an intermediary's margin
+
+---
+
+## How It Improves Existing Processes
+
+| Existing Process | InvoiceNow |
+|-----------------|----------------|
+| Single intermediary sets the rate | Competitive Dutch auction — market sets the rate |
+| Opaque pricing, no transparency | On-chain bids, verifiable results |
+| Manual verification of invoice legitimacy | ZK proofs verify invoice validity without exposing sensitive data |
+| Weeks of onboarding and credit checks | Trust score computed on-chain from verifiable history |
+| Settlement delays, wire transfer risk | Atomic settlement on Canton's Global Synchronizer |
+| Counterparty risk on both sides | Smart contract holds funds in escrow until conditions are met |
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Canton Global Synchronizer               │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │   Supplier   │    │  Auction     │    │  Financier   │  │
+│  │  Participant │◄──►│  Contract    │◄──►│  Participant │  │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘  │
+│         │                   │                   │           │
+│         │            ┌──────▼───────┐           │           │
+│         │            │  ZK Proof    │           │           │
+│         │            │  Verifier    │           │           │
+│         │            └──────┬───────┘           │           │
+│         │                   │                   │           │
+│         └───────────────────▼───────────────────┘           │
+│                    Atomic Settlement                         │
+└─────────────────────────────────────────────────────────────┘
+         ▲                                        ▲
+         │                                        │
+┌────────┴──────────┐                  ┌──────────┴────────┐
+│  Spring Boot API   │                  │  React + Vite UI  │
+│  (backend/)        │                  │  (frontend/)      │
+└───────────────────┘                  └───────────────────┘
+```
+
+**Stack:**
+- **Smart Contracts:** Daml (invoice-finance package on Canton Network)
+- **Backend:** Spring Boot (Java 21) — REST API over Canton Ledger API
+- **Frontend:** React + Vite
+- **Runtime:** Docker Compose — participant node, validator, PostgreSQL, auth, observability
+- **Privacy Layer:** Canton's contract-level visibility enforcement + ZK proofs
+
+---
+
+## How the ZK Proofs Work
+
+This is the core technical innovation. Here is exactly what is happening and why it matters.
+
+### The Problem ZK Proofs Solve
+
+When a supplier submits an invoice to the auction, they face a fundamental dilemma:
+
+- **Financiers need to verify the invoice is real** — that the buyer actually owes the money, the amount is correct, and the invoice has not already been sold elsewhere (double-financing fraud)
+- **But the supplier cannot expose raw invoice data** — it contains buyer identity, contract terms, payment history, and business relationships that are commercially confidential
+
+Without ZK proofs, you are forced to choose: either expose sensitive data to every potential financier, or accept unverified invoices and absorb fraud risk. Both options are unacceptable. ZK proofs eliminate this tradeoff entirely.
+
+### What a ZK Proof Actually Is
+
+A Zero-Knowledge proof is a cryptographic method that lets one party (the **prover**) convince another party (the **verifier**) that a statement is true — **without revealing any information beyond the truth of the statement itself.**
+
+Classic analogy: Imagine proving you know the solution to a maze without ever showing the path. You walk out the exit. The verifier is convinced you knew the route. They learned nothing about which turns you took.
+
+In InvoiceNow: the supplier proves their invoice satisfies all validity conditions **without revealing the invoice itself.**
+
+### What We Prove With ZK
+
+For each invoice submitted to the auction, a ZK proof is generated that attests to the following statements simultaneously, without revealing the underlying data:
+
+**1. Invoice Existence and Authenticity**
+```
+PROVE: hash(invoice_data) == committed_hash
+       AND invoice was signed by valid_buyer_key
+       AND signature is cryptographically valid
+
+WITHOUT REVEALING: invoice_data, buyer_identity, contract_terms
+```
+
+**2. Invoice Value Range**
+```
+PROVE: invoice_amount >= minimum_threshold
+       AND invoice_amount <= maximum_threshold
+
+WITHOUT REVEALING: exact invoice_amount
+```
+
+This uses a **range proof** — a ZK construction that proves a number falls within a range. Financiers know the invoice is worth financing. They do not know the exact face value until after the auction closes and settlement occurs.
+
+**3. No Double-Financing (Nullifier Check)**
+```
+PROVE: nullifier = hash(invoice_id || supplier_secret) is UNIQUE
+       AND nullifier does NOT exist in the on-chain NullifierRegistry
+
+WITHOUT REVEALING: invoice_id, supplier_secret
+```
+
+This is the most important fraud-prevention mechanism in the system.
+
+Every invoice generates a unique **nullifier** — a cryptographic fingerprint derived from the invoice ID and a secret only the supplier knows. When the ZK proof is verified on-chain, the nullifier is written to a registry contract. If a supplier attempts to submit the same invoice a second time (to a different financier, or in a new auction), the nullifier already exists in the registry and the proof is **rejected at the contract level.**
+
+The double-financing fraud is detected cryptographically — without ever revealing which invoice was duplicated, who the buyer was, or any other details. The proof simply fails.
+
+**4. Supplier Trust Score Threshold**
+```
+PROVE: trust_score >= required_minimum_for_this_auction
+       AND trust_score was derived from verified on-chain history
+
+WITHOUT REVEALING: exact trust_score, individual transaction history
+```
+
+### ZK Proof Flow — Step by Step
+
+```
+SUPPLIER SIDE  (off-chain computation in zk-bank-service)
+──────────────────────────────────────────────────────────
+
+1. Supplier uploads invoice to zk-bank-service
+
+2. Service constructs the witness (all private inputs):
+   witness = {
+     invoice_data,         ← private: raw invoice contents
+     supplier_secret,      ← private: supplier's blinding factor
+     buyer_pubkey,         ← private: who signed the invoice
+     amount,               ← private: face value
+     nullifier_preimage    ← private: invoice_id + secret
+   }
+
+3. Prover runs the ZK circuit over the witness:
+   (proof, public_outputs) = PROVE(circuit, witness)
+
+   public_outputs (visible to everyone on-chain):
+   {
+     committed_hash,       ← hash of invoice, verifiable without contents
+     nullifier,            ← unique fingerprint, registered to prevent reuse
+     amount_range_valid,   ← boolean: invoice is within acceptable range
+     trust_threshold_met   ← boolean: supplier qualifies for this auction tier
+   }
+
+   NOTE: In development, MOCK_ZK=true skips real proof generation
+   for fast iteration. Remove this flag for production.
+
+CANTON LEDGER SIDE  (on-chain Daml contract execution)
+───────────────────────────────────────────────────────
+
+4. Supplier submits SubmitInvoice command to AuctionContract:
+   {
+     proof,                ← the ZK proof blob
+     public_outputs,       ← the verified claims
+     invoice_commitment    ← cryptographic binding to the invoice
+   }
+
+5. AuctionContract calls the ZK Verifier module:
+   verify(proof, public_outputs) → bool
+   (if false: transaction rejected, invoice not entered)
+
+6. Verifier checks the NullifierRegistry:
+   registry.contains(nullifier) → REJECT if already present
+
+7. If all checks pass:
+   - Nullifier written to NullifierRegistry (permanently locked)
+   - Invoice enters the active auction queue
+   - Eligible financiers are notified per Canton's privacy model
+```
+
+### Why Canton Is the Right Chain for This
+
+Canton's privacy model means **contract state is only delivered to explicitly named stakeholders** — enforced at the ledger protocol level, not the application layer. This is architecturally different from any public chain.
+
+- ZK proof data is verified on-chain with full cryptographic guarantees
+- But the proof and its public outputs are only visible to the relevant auction parties
+- A financier not participating in Invoice X's auction **never receives Invoice X's data** at all — it is never transmitted to their node
+- This is not filtering — it is enforced by the Canton participant nodes cryptographically
+
+On Ethereum, all of this would be globally readable. That alone would make enterprise invoice financing impossible.
+
+---
+
+## Trust Scoring System
+
+Beyond per-invoice ZK proofs, the system maintains an on-chain **trust score** for each participant.
+
+### How Trust Scores Are Computed
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| On-time payment rate | 40% | Percentage of past invoices settled by due date |
+| Default rate | 30% | Percentage of invoices that went to dispute or default |
+| Volume history | 15% | Total value of successfully settled invoices |
+| Time on network | 15% | Age of the participant's Canton identity |
+
+The score is computed off-chain and committed on-chain via a ZK proof — the **score itself is cryptographically verified as correct** without revealing every individual transaction that contributed to it.
+
+### Why This Matters
+
+A financier bidding on an invoice needs confidence in two independent things:
+1. The invoice is authentic and unforgeable (handled by the invoice ZK proof)
+2. The supplier has a history of honest behavior (handled by trust score proof)
+
+Both are verified cryptographically. Neither requires a centralized credit bureau, a bank reference, or a manual underwriting process.
+
+---
+
+## The Dutch Auction Mechanism
+
+### How the Auction Works
+
+InvoiceNow uses a **sealed-bid descending Dutch auction:**
+
+```
+1. SUBMISSION
+   Supplier submits invoice + ZK proof
+   Auction opens at a starting discount rate (e.g. 8.0%)
+   — financier would pay $92,000 for a $100,000 invoice
+
+2. PRICE DESCENT
+   The discount rate falls over time:
+
+   t=0min:   8.0% discount  →  financier pays $92,000
+   t=10min:  7.5% discount  →  financier pays $92,500
+   t=20min:  7.0% discount  →  financier pays $93,000
+   t=30min:  6.5% discount  →  financier pays $93,500
+   ...
+
+   The longer financiers wait, the better the rate for the supplier
+   but the higher the risk another financier takes the deal first
+
+3. SEALED BID SUBMISSION
+   Financiers submit their maximum acceptable discount rate (sealed)
+   Bids are hidden until auction closes — prevents front-running
+
+4. CLEARING
+   Auction closes when:
+   - A bid matches the current descending price, OR
+   - A time limit is reached
+
+   Winning financier: lowest discount rate bid that covers the invoice
+   They pay: face_value × (1 - winning_discount_rate)
+   They collect: full face_value at invoice maturity
+
+5. ATOMIC SETTLEMENT ON CANTON
+   - Funds transfer from financier to supplier
+   - Invoice ownership transfers to financier
+   - Nullifier permanently locked in registry
+   - All in one atomic transaction — no partial settlement risk
+```
+
+### Why a Dutch Auction
+
+- **Suppliers get the best possible rate** — financier competition drives discount rates down
+- **Financiers reveal their true cost of capital** — no incentive to bid strategically below true preference
+- **No information asymmetry** — ZK proofs give all financiers the same verified facts about the invoice
+- **Front-running is impossible** — sealed bids prevent financiers from adjusting based on others' revealed bids
+- **Price discovery is real** — the clearing rate reflects genuine market supply and demand
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- Docker + Docker Compose (**8 GB+ memory allocation required**)
+- Make
+- Node.js + npm
+- Java 21
+- Daml SDK
+
+### First-Time Setup
+
+```bash
+cd project
+make setup    # prompts for auth mode, observability, test mode
+make build
+make start
+```
+
+### ZK Bank Service
+
+```bash
+cd zk-bank-service
 npm install
-MOCK_ZK=true node src/server.js
-manu — 4:14 AM
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Canton Invoice Finance — Full Architecture</title>
-
-message.txt
-33 KB
-vatsal — 6:35 AM
-# Deadline Derby / Canton Quickstart — Single Run Guide
-
-This is the **one main document** for the repository.
-All setup, run, development, testing, architecture, security, and ops notes were condensed here.
-
----
-## 1) What this project is
-
-Full-stack Canton Network app scaffold + ETHDenver invoice-finance flow:
-- Daml smart contracts
-- Spring Boot backend
-- React + Vite frontend
-- Docker Compose runtime (participant, validator, DB, auth, optional observability)
-
-Main working directory for commands:
-```bash
-cd project
+MOCK_ZK=true node src/server.js     # fast dev/mock mode
+node src/server.js                   # real proof generation
 ```
 
----
-## 2) Prerequisites
-
-Minimum recommended:
-- Docker + Docker Compose (Docker memory: **8 GB+**)
-- Make
-- Node.js + npm
-- Java 21 (for local build tooling)
-- Daml SDK (can be installed/updated via Make target)
-
-If environment tooling is configured in this repo:
----
-
-## 3) Fastest way to run (first time)
-
-From repository root:
-```bash
-cd project
-make setup
-make build
-make start
-```
-### What `make setup` asks you
-
-- auth mode: `oauth2` (default) or `shared-secret`
-- observability on/off
-- test mode on/off
-You can re-run `make setup` any time.
+Use `MOCK_ZK=true` during development to skip proof generation latency. Remove it when testing the full cryptographic flow.
 
 ---
-## 4) Main URLs after startup
 
-- App frontend: http://app-provider.localhost:3000
-- App user wallet: http://wallet.localhost:2000
-- App provider wallet: http://wallet.localhost:3000
-- ANS UIs: http://ans.localhost:2000 and http://ans.localhost:3000
-- Backend API: http://localhost:8080
-- Swagger UI (host): http://localhost:9090
+## Service URLs
 
-If enabled:
-- Keycloak: http://keycloak.localhost:8082
-- Grafana: http://localhost:3030
-- SV UI: http://sv.localhost:4000
-- Scan UI: http://scan.localhost:4000
+| Service | URL |
+|---------|-----|
+| App frontend | http://app-provider.localhost:3000 |
+| App user wallet | http://wallet.localhost:2000 |
+| App provider wallet | http://wallet.localhost:3000 |
+| ANS UI (user) | http://ans.localhost:2000 |
+| ANS UI (provider) | http://ans.localhost:3000 |
+| Backend API | http://localhost:8080 |
+| Swagger UI | http://localhost:9090 |
+| Keycloak (OAuth2 mode) | http://keycloak.localhost:8082 |
+| Grafana | http://localhost:3030 |
+| SV UI | http://sv.localhost:4000 |
+| Scan UI (tx monitor) | http://scan.localhost:4000 |
+| Vite dev server | http://app-provider.localhost:5173 |
 
 ---
-## 5) Daily commands (project/)
+
+## Daily Dev Commands
 
 ```bash
-make start              # start services
-make stop               # stop services
-make status             # container status
-make logs               # logs
-make tail               # follow logs
-
-make build              # full build
-make build-daml         # Daml + DARs
-make build-backend      # backend build
-make build-frontend     # frontend build
-
-make restart-backend
-make restart-frontend
-
-make clean-all          # wipe artifacts, containers, volumes
-make install-daml-sdk   # install/upgrade Daml SDK
+# From project/
+make start              # start all services
+make stop               # stop all services
+make status             # container health check
+make logs               # view logs
+make tail               # follow logs live
+make build              # full rebuild
+make build-daml         # Daml contracts + DARs only
+make build-backend      # Spring Boot only
+make build-frontend     # React/Vite only
+make restart-backend    # hot restart backend
+make restart-frontend   # hot restart frontend
+make clean-all          # wipe all artifacts, containers, volumes
+make install-daml-sdk   # upgrade Daml SDK to latest
 ```
 
----
+### Frontend Hot Reload
 
-## 6) Frontend local dev (hot reload)
-
-Terminal A (from `project/`):
-
+**Terminal A** (`project/`):
 ```bash
 make start-vite-dev
 ```
 
-Terminal B (from `project/frontend/`):
-
+**Terminal B** (`project/frontend/`):
 ```bash
 npm run dev
-... (643 lines left)
-
-message.txt
-34 KB
-﻿
-# Deadline Derby / Canton Quickstart — Single Run Guide
-
-This is the **one main document** for the repository.
-All setup, run, development, testing, architecture, security, and ops notes were condensed here.
-
----
-## 1) What this project is
-
-Full-stack Canton Network app scaffold + ETHDenver invoice-finance flow:
-- Daml smart contracts
-- Spring Boot backend
-- React + Vite frontend
-- Docker Compose runtime (participant, validator, DB, auth, optional observability)
-
-Main working directory for commands:
-```bash
-cd project
-```
-
----
-## 2) Prerequisites
-
-Minimum recommended:
-- Docker + Docker Compose (Docker memory: **8 GB+**)
-- Make
-- Node.js + npm
-- Java 21 (for local build tooling)
-- Daml SDK (can be installed/updated via Make target)
-
-If environment tooling is configured in this repo:
----
-
-## 3) Fastest way to run (first time)
-
-From repository root:
-```bash
-cd project
-make setup
-make build
-make start
-```
-### What `make setup` asks you
-
-- auth mode: `oauth2` (default) or `shared-secret`
-- observability on/off
-- test mode on/off
-You can re-run `make setup` any time.
-
----
-## 4) Main URLs after startup
-
-- App frontend: http://app-provider.localhost:3000
-- App user wallet: http://wallet.localhost:2000
-- App provider wallet: http://wallet.localhost:3000
-- ANS UIs: http://ans.localhost:2000 and http://ans.localhost:3000
-- Backend API: http://localhost:8080
-- Swagger UI (host): http://localhost:9090
-
-If enabled:
-- Keycloak: http://keycloak.localhost:8082
-- Grafana: http://localhost:3030
-- SV UI: http://sv.localhost:4000
-- Scan UI: http://scan.localhost:4000
-
----
-## 5) Daily commands (project/)
-
-```bash
-make start              # start services
-make stop               # stop services
-make status             # container status
-make logs               # logs
-make tail               # follow logs
-
-make build              # full build
-make build-daml         # Daml + DARs
-make build-backend      # backend build
-make build-frontend     # frontend build
-
-make restart-backend
-make restart-frontend
-
-make clean-all          # wipe artifacts, containers, volumes
-make install-daml-sdk   # install/upgrade Daml SDK
-```
-
----
-
-## 6) Frontend local dev (hot reload)
-
-Terminal A (from `project/`):
-
-```bash
-make start-vite-dev
-```
-
-Terminal B (from `project/frontend/`):
-
-```bash
-npm run dev
-```
-
-Useful frontend commands:
-
-```bash
-npm run gen:openapi
+npm run gen:openapi     # regenerate API client from openapi.yaml
 npm run lint
 ```
 
 ---
 
-## 7) Testing
-
-From `project/`:
+## Testing
 
 ```bash
-make test
-make test-daml
-make integration-test
+cd project
+make test               # full test suite
+make test-daml          # Daml contract unit tests
+make integration-test   # Playwright E2E (project/integration-test/)
 ```
 
-Integration tests use Playwright under `project/integration-test`.
+---
+
+## Project Structure
+
+```
+project/
+├── daml/
+│   └── invoice-finance/       # Core smart contracts
+│       ├── Invoice.daml        # Invoice template
+│       ├── Auction.daml        # Dutch auction logic
+│       ├── NullifierRegistry.daml
+│       └── Settlement.daml
+├── backend/                   # Spring Boot API service
+├── frontend/                  # React + Vite UI
+├── common/
+│   └── openapi.yaml           # Shared API schema (backend ↔ frontend)
+├── compose.yaml               # Docker Compose orchestration
+└── docker/
+    ├── backend-service/
+    └── modules/
+        ├── localnet/          # Splice LocalNet (Canton infrastructure)
+        ├── keycloak/          # OAuth2 identity provider
+        ├── pqs/               # Participant Query Store
+        └── observability/     # Grafana + Prometheus + Loki
+
+zk-bank-service/               # ZK proof generation service (Node.js)
+├── src/
+│   └── server.js
+└── package.json
+```
 
 ---
 
-## 8) Core architecture (short)
+## Canton Privacy Model — Why It Matters Here
 
-- Smart contracts: `project/daml/` (includes invoice-finance package)
-- Backend API/service: `project/backend/`
-- Frontend UI: `project/frontend/`
-- Shared API contract: `project/common/openapi.yaml`
-- Runtime orchestration: `project/compose.yaml` + module compose/env files
+**Public blockchain** (Ethereum, Solana): all state is globally visible. Every invoice, every bid, every settlement — readable by anyone. This makes enterprise invoice financing impossible.
 
-Privacy model (Canton): contract visibility is enforced at ledger delivery level.
+**Canton Network**: contract state is **only delivered to explicitly named stakeholders**, enforced at the ledger protocol level.
 
----
+This means:
+- **Suppliers** see their own invoices and auction outcomes only
+- **Financiers** see only auctions they are eligible to participate in
+- **Non-participating nodes** receive none of the invoice data — it is never transmitted to them
+- **Settlement events** are visible to the network, but not invoice contents or bid amounts
 
-## 9) Security + auth summary
-
-Supported auth modes:
-- `oauth2` (Keycloak)
-- `shared-secret`
-
-General security notes:
-- Do not expose local demo credentials/services to public internet.
-- Use OAuth2 for realistic browser/user flows.
-- Demo includes app-layer tenant/ownership rules for user-level isolation.
-
-Vulnerability reporting (upstream policy):
-https://www.digitalasset.com/responsible-disclosure
+This is not application-layer filtering. It is cryptographically enforced by the Canton participant nodes. The ZK proofs layer on top of this to provide additional guarantees even within the set of stakeholders who can see a given invoice.
 
 ---
 
-## 10) Troubleshooting quick fixes
+## Auth Modes
 
-If startup/build fails:
+**OAuth2 (default):** Local Keycloak instance. Realistic browser flows with proper identity federation. Pre-configured tenants: `AppProvider` and `AppUser`.
 
+```bash
+# Keycloak admin console
+http://keycloak.localhost:8082/admin/master/console/
+```
+
+**Shared-secret:** Simpler, faster for local dev. No Keycloak dependency.
+
+Set during `make setup`. Can be reconfigured anytime by re-running `make setup`.
+
+---
+
+## Port Reference
+
+### Suffix Scheme
+
+| Suffix | Service |
+|--------|---------|
+| `901` | Ledger API |
+| `902` | Admin API |
+| `903` | Validator Admin API |
+| `975` | JSON (HTTP) Ledger API |
+
+### Prefix by Role
+
+| Prefix | Role |
+|--------|------|
+| `4xxx` | Super Validator |
+| `3xxx` | App Provider |
+| `2xxx` | App User |
+
+### Key Ports
+
+| Service | Port |
+|---------|------|
+| Backend Service | 8080 |
+| Swagger UI (external) | 9090 |
+| PostgreSQL | 5432 |
+| App Provider Ledger API | 3901 |
+| App User Ledger API | 2901 |
+| SV Ledger API | 4901 |
+| Keycloak | 8082 |
+| Grafana | 3030 |
+
+---
+
+## Troubleshooting
+
+**Services fail to start:**
 ```bash
 cd project
 make clean-all
@@ -358,583 +487,42 @@ make build
 make start
 ```
 
-Also check:
-- Docker has enough memory (8 GB+)
-- Daml SDK is current (`make install-daml-sdk`)
-- logs (`make logs` / `make tail`)
+**Common causes:**
+- Docker memory under 8 GB — increase in Docker Desktop settings
+- Stale Daml SDK — run `make install-daml-sdk`
+- Port conflict — check `make status` and `make logs`
 
-To collect logs bundle:
-
+**Collect debug bundle:**
 ```bash
 cd project
 make capture-logs
-# in another shell after reproducing issue:
+# In another terminal, reproduce the issue, then:
 tar -czvf quickstart-logs.tar.gz logs
 ```
 
 ---
 
-## 11) Important legal note
+## External Token Transfers
 
-This repo inherits Digital Asset Quickstart terms/licensing conditions.
-By using the software/binaries, you are subject to those terms.
+For integrations requiring external token transfers, use Registry API endpoints rather than direct contract queries:
+
+```
+http://scan.localhost:4000/registry/transfer-instruction/v1/transfer-factory
+```
 
 ---
 
-## 12) One-line startup reminder
+## Legal
 
-```bash
-cd project && make setup && make build && make start
-```
-# Canton Network application quickstart
+This project inherits Digital Asset Quickstart terms and licensing conditions. By using the software and binaries, you are subject to those terms.
 
-**Note**: On July 2, 2025, the quickstart underwent an architectural change and no longer connects to DevNet.
-This update may require a `make clean-all` to remove old data and then a `make build`.
+Built on [Splice LocalNet](https://github.com/hyperledger-labs/splice/tree/main/cluster/compose/localnet).  
+Licensed under the **BSD Zero Clause License**.
 
-This project provides scaffolding to develop a Canton Network (CN) application for the Global Synchronizer.
-We intend that you clone the repository and incrementally update the solution to match your business operations.
-We assume that you have a Daml Enterprise license to leverage all of this project's features at runtime.
-However, an OSS developer can benefit from this project by understanding how a CN Global Synchronizer application is structured.
+Upstream documentation: [Canton Network Quickstart](https://docs.digitalasset.com/build/3.3/quickstart/download/cnqs-installation.html)
 
-[Binaries terms and conditions](https://github.com/digital-asset/cn-quickstart/blob/main/terms.md).
+Vulnerability reporting: https://www.digitalasset.com/responsible-disclosure
 
-Licensed under the BSD Zero Clause License.
+---
 
-## Disclaimer
-
-Once you are familiar with the Quickstart Application, review the technology choices and the application design to determine what changes are needed.
-These decisions are up to you. 
-The CN Quickstart is a rapidly evolving work in progress.
-
-## Docs and guides
-
-You can find Quickstart documentation in the Canton Network documentation portal.
-- [Quickstart Installation](https://docs.digitalasset.com/build/3.3/quickstart/download/cnqs-installation.html)
-- [Exploring The Demo](https://docs.digitalasset.com/build/3.3/quickstart/operate/explore-the-demo.html)
-- [Project Structure](https://docs.digitalasset.com/build/3.3/quickstart/configure/project-structure-overview.html)
-- [FAQ](https://docs.digitalasset.com/build/3.3/quickstart/troubleshoot/cnqs-faq.html)
-- [Observability and Troubleshooting Overview](https://docs.digitalasset.com/build/3.3/quickstart/observe/observability-troubleshooting-overview.html)
-
-### Technical documentation
-
-- [Observability](sdk/docs/user/001-observability.md)
-- [Topology](sdk/docs/user/002-topology.md)
-
-This project is rapidly enhanced, so please check back often for updates.
-
-## Setup
-
-See the [Quickstart Installation Guide](https://docs.digitalasset.com/build/3.3/quickstart/download/cnqs-installation.html) for installation and setup directions.
-
-## Quickstart
-
-To start the application:
-
-```bash
-# In the local repository directory
-$ direnv allow
-$ cd quickstart
-
-# Setup your quickstart environment
-$ make setup
-
-# Build the application
-$ make build
-
-# Start the application, Canton services, and Observability (if enabled)
-$ make start
-
-# In a separate shell - run a Canton Console for the App Provider
-$ make canton-console
-
-# In a separate shell - run Daml Shell
-$ make shell
-```
-
-An assistant helps set up deployment when running `make start` for the first time. 
-You can choose to run the application in standard mode or test mode and with or without OAUTH2. 
-You may change this later by running `make setup`.
-
-## Debugging TL;DR
-
-If a container fails to start, there are a few things to try:
-
-- Ensure Docker Compose is configured to allocate enough memory. The recommended minimum total memory is 8 GB.
-- Start fresh with `make clean-all` and then manually delete all Docker images and volumes.
-- You may need to upgrade to a more recent version of the Daml SDK. Run `make install-daml-sdk` to assess your version and upgrade if you're not on the latest version.
-
-**Note**: The CN Quickstart uses Java SDK version `Eclipse Temurin JDK version 21` which runs within the Docker container.  This information is specified in `quickstart/compose.yaml` and `.env`.
-
-If you need assistance, please follow these directions to gather the log information needed for debugging:
-1. `make install-daml-sdk`  # make sure you have the latest sdk
-2. `make setup`             # optional
-3. `make clean-all`         # remove data from prior runs
-4. `make capture-logs`      # this needs to be done in a separate terminal because it will block and keep running.  Use `<ctrl-c>` to stop
-5. `make start`             # start the system with logging enabled
-6. `tar -czvf <your file name with .tar.gz>` logs  # gather the content of the `logs` directory into a file
-
-
-## Available make targets
-
-Run `make help` to see a list of all available targets.
-Read the [FAQ Make target reference](9https://docs.digitalasset.com/build/3.3/quickstart/troubleshoot/cnqs-faq.html#cn-app-quickstart-make-target-reference) for a detailed list of make targets and their descriptions.
-
-## Topology
-
-Quickstart is built on top of https://github.com/hyperledger-labs/splice/tree/main/cluster/compose/localnet. Check [documentation](https://docs.sync.global/app_dev/testing/localnet.html) for more information about Splice LocalNet.
-
-This diagram summarizes the relationship of services that are started as part of `make start`. The `canton` and `splice` services are configured to serve multiple logically separate components (each component represented with a box in the diagram) from a single container to reduce resource consumption. Similarly the `postgres` service contains multiple databases required by Quickstart services. One `nginx` service is used as proxy for all Quickstart services that needs one except for `keycloak` that has its own `nginx-keycloak` as it needs to be ready before other services start. The focus of `Canton Network Quickstart` is to provide a development environment for App Providers.
-
-![QS Topology](sdk/docs/images/qs-topology.drawio.png)
-
-For more information and detailed diagrams, please refer to the [Topology](sdk/docs/user/002-topology.md) documentation.
-
-## Accessing frontends
-
-After starting the application with `make start` you can access the following UIs:
-
-### Application UIs
-
-- **App User ANS UI**
-    - **URL**: [http://ans.localhost:2000](http://ans.localhost:2000)
-    - **Description**: Interface for registering names.
-
-- **App Provider ANS UI**
-    - **URL**: [http://ans.localhost:3000](http://ans.localhost:3000)
-    - **Description**: Interface for registering names.
-
-- **Application user frontend**
-  - **URL**: [http://app-provider.localhost:3000](http://app-provider.localhost:3000)
-  - **Description**: The main web interface of the application.
-
-- **App user wallet UI**
-  - **URL**: [http://wallet.localhost:2000](http://wallet.localhost:2000)
-  - **Description**: Interface for managing user wallets.
-
-- **App provider wallet UI**
-  - **URL**: [http://wallet.localhost:3000](http://wallet.localhost:3000)
-  - **Description**: Interface for managing user wallets.
-
-### Super Validator UIs (if LocalNet enabled via `make setup`)
-
-- **Super Validator web UI**
-  - **URL**: [http://sv.localhost:4000](http://sv.localhost:4000)
-  - **Description**: Interface for super validator functionalities.
-
-- **Scan Web UI**
-  - **URL**: [http://scan.localhost:4000](http://scan.localhost:4000)
-  - **Description**: Interface to monitor transactions.
-
-  > **Note**: `LocalNet` rounds may take up to 6 rounds (equivalent to one hour) to display in the scan UI.
-
-The `*.localhost` domains will resolve to your local host IP `127.0.0.1`.
-
-## External Token Transfers
-
-For external integrations requiring token transfers, the system uses Registry API endpoints rather than direct contract queries. 
-Unlike direct contract access, external token transfers are handled through Registry API endpoints exposed by the Scan app.
-
-**LocalNet Endpoint:**
-Transfer Factory: `http://scan.localhost:4000/registry/transfer-instruction/v1/transfer-factory`
-
-## Exploring Quickstart Docker Compose
-
-Before exploring advanced topics, we recommend familiarizing yourself with the core components of the Licensing Model Workflow within Quickstart. 
-In particular, the implementation of the `backend-service` serves as an excellent entry point.
-
-If you have already explored the Quickstart web UI and would now like to understand how the Quickstart Docker Compose configuration is orchestrated, start by running a simple setup using `make setup` with Observability and OAuth2 disabled. Then, execute the following command to inspect the resolved configuration for the backend service:
-
-```bash
-make compose-config | tail -n +2 | yq eval '.services.backend-service'
-```
-
-This command outputs a configuration similar to the example below:
-
-```yaml
-command:
-  - /app/start.sh
-container_name: backend-service
-depends_on:
-  pqs-app-provider:
-    condition: service_started
-    required: true
-  splice-onboarding:
-    condition: service_healthy
-    required: true
-environment:
-  _JAVA_OPTIONS: -XX:-UseCompressedOops -Xms512m -Xmx700m
-  AUTH_APP_PROVIDER_BACKEND_USER_NAME: app-provider-backend
-  BACKEND_PORT: "8080"
-  LEDGER_HOST: canton
-  LEDGER_PORT: "3901"
-  POSTGRES_DATABASE: pqs-app-provider
-  POSTGRES_HOST: postgres
-  POSTGRES_PASSWORD: supersafe
-  POSTGRES_PORT: "5432"
-  POSTGRES_USERNAME: cnadmin
-  SPRING_PROFILES_ACTIVE: shared-secret
-  VALIDATOR_URI: http://splice:3903/api/validator
-image: eclipse-temurin:17.0.12_7-jdk
-labels:
-  description: 'Backend service supporting the Quickstart Licensing workflow. Note: The APP_PROVIDER_PARTY environment variable is dynamically resolved at runtime before the main process is initiated.'
-mem_limit: "1073741824"
-networks:
-  default: null
-ports:
-  - mode: ingress
-    target: 8080
-    published: "8080"
-    protocol: tcp
-volumes:
-  - type: bind
-    source: /repositories/cn-quickstart/quickstart/backend/build/distributions/backend.tar
-    target: /backend.tar
-    bind:
-      create_host_path: true
-  - type: bind
-    source: /repositories/cn-quickstart/quickstart/docker/backend-service/start.sh
-    target: /app/start.sh
-    bind:
-      create_host_path: true
-  - type: volume
-    source: onboarding
-    target: /onboarding
-    volume: {}
-working_dir: /app
-```
-
-This configuration demonstrates how the `backend-service` relies on the Quickstart-provided infrastructure. Quickstart automates much of the local environment setup for LocalNet, allowing you to prioritize application development. As you progress toward deployment and explore cloud orchestration, a deeper grasp of service configuration is invaluable. For now, consider these services a ready-to-use infrastructure foundation.
-
-Then explore `register-app-user-tenant`, the service that registers AppUser tenants to the `backend-service`. This allows end users from the AppUser organization to log in and quickly start the web UI. That, in turn, ties the AppUser Identity Provider to the AppUser primary party ID. If the end user is logged in through this Identity Provider, the user can then act as the AppUser primary party. The `register-app-user-tenant` service utilizes functionality provided by the `splice-onboarding` module to make the task as simple as possible.
-
-This step can also be performed manually through the web UI if you log in to Quickstart as `app-provider` and navigate to the tenants tab. At that tab, you can also see a list of registered tenants and verify that the `AppUser` tenant was automatically pre-registered for you by `register-app-user-tenant`.
-
-Once you run `make create-app-install-request`, the `docker/create-app-install-request` service executes a script that initiates the Licensing workflow on behalf of the `app-user`. This script leverages the capabilities of the `splice-onboarding` module to streamline the process. In a production environment, the initial Licensing workflow step would be executed by submitting a command to the AppUser Participant Node, potentially supported by a dedicated web UI within the AppUser infrastructure.
-
-
-### Authorization
-
-Quickstart support to different authorization modes:
-- **oauth2** (default)
-- **shared-secret**
-See Splice LocalNet documentation for the shared-secret mode which is default Splice LocalNet auth mode.
-
-#### OAuth2 mode - keycloak setup
-To perform operations such as creating AppInstallRequest and renewing License, users must be authenticated and authorized. 
-The endpoints that perform these operations are protected by OAuth2 Authorization Code Grant Flow. 
-GRPC communication between the backend service and participant is secured by OAuth2 Client Credentials Flow.
-
-In OAuth2 mode, Quickstart starts a local multi-tenant instance of [keycloak](https://www.keycloak.org/).
- Two registered tenants are `AppProvider` and `AppUser`. Tenants have pre-configured users `app-provider` and `app-user`, as well as clients needed for validator, wallet, pqs, frontend, and backend service. Pre-configured users, clients, and realms are imported from the `docker/compose/modules/keycloak/conf/data` folder on Keycloak startup. The configuration in that folder is exported from the Keycloak instance after manual configuration via [Keycloak Administration Console](http://keycloak.localhost:8082/admin/master/console/) by running commands
-```
-/opt/keycloak/bin/kc.sh export --dir=/opt/keycloak/data/import --realm AppUser --optimized
-/opt/keycloak/bin/kc.sh export --dir=/opt/keycloak/data/import --realm AppProvider --optimized
-```
-Pre-configured users, clients and realms are used directly in Quickstart components and via environment variables. Each component, module or backend-service refers to the pre-configured values in its environment variables. e.g. `docker/modules/keycloak/env/app-provider/on/oauth2.env`, `docker/backend-service/onboarding/env/oauth2.env`
-
-#### Backend service tenant registration
-Only the end users from an organization registered using endpoint `http://backend-service:${BACKEND_PORT}/admin/tenant-registrations` can log into the Quickstart web UI. 
-The `AppUser` organization is registered on the Quickstart startup by calling the registration script in the `register-app-user-tenant` Docker container.
-
-# Port mappings
-
-## Web UIs
-
-| Service | Port | URL Pattern | Description |
-|---------|------|-------------|-------------|
-| App User UI | 2000 | `*.localhost:2000` | App User wallet & ANS interfaces |
-| App Provider UI | 3000 | `*.localhost:3000` | App Provider & application frontend |
-| SV UI | 4000 | `*.localhost:4000` | Super Validator, Scan & SV web UIs |
-| Swagger UI: External | 9090 | `localhost:9090` | API documentation browser (host access) |
-| Swagger UI: Internal | 8080 | - | API documentation browser (container) |
-
-## Application services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Backend Service | 8080 | Spring Boot backend for Licensing workflow |
-| Backend Debug (JVM) | 5005 | Remote JVM debugging (when `DEBUG_ENABLED=true`) |
-
-## Canton Participant Ledger API
-
-| Role | Port | Description |
-|------|------|-------------|
-| SV Participant | 4901 | Super Validator Ledger API |
-| App Provider Participant | 3901 | App Provider Ledger API |
-| App User Participant | 2901 | App User Ledger API |
-
-## Canton Participant admin API
-
-| Role | Port | Description |
-|------|------|-------------|
-| SV Participant | 4902 | Super Validator Admin API |
-| App Provider Participant | 3902 | App Provider Admin API |
-| App User Participant | 2902 | App User Admin API |
-
-## Canton JSON API (HTTP Ledger API)
-
-| Role | Port | Description |
-|------|------|-------------|
-| SV Participant | 4975 | Super Validator JSON API |
-| App Provider Participant | 3975 | App Provider JSON API |
-| App User Participant | 2975 | App User JSON API |
-
-## Splice Validator admin API
-
-| Role | Port | Description |
-|------|------|-------------|
-| SV Validator | 4903 | Super Validator Admin API |
-| App Provider Validator | 3903 | App Provider Validator Admin API |
-| App User Validator | 2903 | App User Validator Admin API |
-
-## Database
-
-| Service | Port | Description |
-|---------|------|-------------|
-| PostgreSQL | 5432 | Multi-database PostgreSQL instance |
-
-## Authentication (When OAuth2 enabled)
-
-| Service | External port | Internal port | Description |
-|---------|--------------|---------------|-------------|
-| Keycloak (via nginx) | 8082 | 8082 | Identity Provider for OAuth2 |
-| Keycloak Health | - | 9000 | Internal health check endpoint |
-
-## Observability stack
-
-| Service | External port | Internal port | Description |
-|---------|--------------|---------------|-------------|
-| Grafana | 3030 | 3000 | Metrics & logs dashboard |
-| OTEL Collector (OTLP) | - | 14001 | OpenTelemetry OTLP receiver |
-| OTEL Collector (Fluentd) | 14002 | 14002 | Log collection endpoint |
-| Prometheus | - | 14011 | Metrics storage & query |
-| Loki | - | 14012 | Log aggregation |
-| Tempo (OTLP) | - | 14013 | Trace collection |
-| Tempo (HTTP) | - | 14014 | Trace query API |
-| Canton Metrics | - | 14021 | Canton metrics endpoint |
-| cAdvisor | - | 14022 | Container metrics |
-| Postgres Exporter | - | 14023 | PostgreSQL metrics |
-| Nginx Exporter | - | 14024 | Nginx metrics |
-
-## Port suffix scheme
-
-Quickstart uses a port suffix scheme for participant/validator services:
-
-| Suffix | Service type |
-|--------|-------------|
-| 901 | Ledger API |
-| 902 | Admin API |
-| 903 | Validator Admin API |
-| 961 | gRPC Health Check |
-| 975 | JSON API |
-| 900 | HTTP Health Check |
-
-**Prefix convention:**
-- `4xxx` = Super Validator (SV)
-- `3xxx` = App Provider
-- `2xxx` = App User
-
-## Localhost domain mappings
-
-| URL | Port | Service |
-|-----|------|---------|
-| http://wallet.localhost:2000 | 2000 | App User Wallet UI |
-| http://ans.localhost:2000 | 2000 | App User ANS UI |
-| http://wallet.localhost:3000 | 3000 | App Provider Wallet UI |
-| http://ans.localhost:3000 | 3000 | App Provider ANS UI |
-| http://app-provider.localhost:3000 | 3000 | Application Frontend |
-| http://sv.localhost:4000 | 4000 | SV Web UI |
-| http://scan.localhost:4000 | 4000 | Scan Web UI |
-| http://keycloak.localhost:8082 | 8082 | Keycloak Admin Console |
-| http://app-provider.localhost:5173 | 5173 | Vite Dev Server (development) |
-
-# Docker Compose-based development for LocalNet
-Quickstart leverages Docker Compose for modular development. 
-Instead of relying on a single extensive docker-compose.yaml file, this approach orchestrates multiple compose files and corresponding environment files for each Quickstart module. 
-Splice LocalNet is housed within the `docker/modules/localnet` directory. 
-In the `Makefile`, Docker Compose commands are dynamically assembled from Splice LocalNet, Quickstart modules, and Quickstart-specific compose and environment files, arranged in an order that respects the interdependencies of the various components.
-
-Some modules (e.g., Keycloak and Observability) are optional and can be toggled on or off based on your selections made during `make setup`. 
-When the Docker Compose command is executed, it merges all specified Compose YAML files in the order they appear on the command line. 
-Likewise, the environment is built by applying each environment file in sequence; if the same variable is defined in multiple files, the value from the later file will overwrite the previous ones.
-
-The `splice-onboarding` module supports two distinct operational modes. 
-Initially, it performs a one-time setup procedure for Canton, Splice and modules. 
-This initialization includes creating a ledger user and assigning necessary permissions. 
-Developers can customize this process by specifying DAR files (and mounting it to file in `/canton/dars` in `splice-onboarding`) for ledger upload, custom shell scripts, or environment variables through their project’s `compose.yaml` file. 
-For example:
-
-```yaml
-splice-onboarding:
-  env_file:
-    - ./docker/backend-service/onboarding/env/${AUTH_MODE}.env
-  volumes:
-    - ./docker/backend-service/onboarding/onboarding.sh:/app/scripts/on/backend-service.sh
-    - ./daml/licensing/.daml/dist/quickstart-licensing-0.0.1.dar:/canton/dars/quickstart-licensing-0.0.1.dar
-```
-
-Developers may want to leverage the `splice-onboarding` module to execute custom onboarding scripts once all dependent services are operational (for instance, the `register-app-user-tenant` script) or to initialize specific workflows (such as scripts defined in `/docker/create-app-install-request/compose.yaml`).
-
-By integrating this approach, developers can leverage prepopulated environment variables, such as `APP_PROVIDER_PARTY` and other authentication-related settings, while also accessing a suite of tools bundled with the `splice-onboarding` container. 
-These tools, including utilities like curl, jq, and jwt-cli, together with an library of shell functions found in `docker/modules/splice-onboarding/docker/utils.sh` that demonstrate on how to utilize JSON Ledger API HTTP endpoints effectively. 
-This comprehensive setup facilitates the achievement of necessary functionality with minimal additional configuration.
-
-Utilizing Docker Compose’s [merge mechanism](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/), developers have complete control over the configuration. 
-They can add any settings by providing a custom `compose.yaml` (which is usually the first file processed in the Docker Compose command) or by appending a `compose.override.yaml` file at the end to override default configurations defined by Splice LocalNet or Quickstart modules.
-
-Please note that while Quickstart is designed to streamline local development, deploying to production requires additional considerations. 
-In the Quickstart demo, the `splice-onboarding` component facilitates initialization, onboarding, and the execution of scripts that drive the demonstration workflows. 
-However, this component is not intended for use in a production environment. 
-In a production-grade environment, you would typically utilize an orchestration framework such as Kubernetes and replace certain automated configurations with controlled, manual configuration steps. 
-This approach enhances security and clearly separates services in line with enterprise standards.
-
-### Modules
-
-The Quickstart repository includes modular components that can be reused in developer projects outside of Quickstart. 
-These modules are located in the `docker/modules` directory by default, however, they can be sourced from any directory by setting the `MODULES_DIR` environment variable accordingly.
-
-Splice LocalNet is a special module borrowed from the [Splice repository](https://github.com/hyperledger-labs/splice/tree/main/cluster/compose/localnet) and is placed by default in `docker/modules`. It can also be relocated by properly configuring the LOCALNET_DIR environment variable.
-
-Each module provides specific functionality and may depend on other modules. The currently supported modules are:
-
-- **keycloak** (optional): Adds support for OAuth2 authorization to Splice LocalNet.
-- **splice-onboarding**: Provides onboarding capabilities, including a collection of tools, resolved environment settings, and shell scripts for calling JSON Ledger API HTTP endpoints.
-- **pqs**: Offers preconfigured PQS instances for Splice LocalNet participants.
-- **observability**: Introduces observability infrastructure components.
-- **daml-shell**: A standalone module that enables launching Daml Shell. By default, it connects to the pqs-app-provider’s Postgres database.
-
-### Docker Profiles
-Docker profiles are used in both Splice LocalNet and Quickstart to enable or disable specific functionalities. Each module can support multiple profiles. 
-For example, Splice LocalNet defines the following five profiles:
-- **app-provider**
-- **app-user**
-- **sv**
-- **swagger-ui**
-- **console**
-
-The `console` module runs as a standalone container, while the other modules start by default unless explicitly disabled (e.g., by omitting the profile flag such as --profile app-provider). 
-In some implementations, modules rely on environment variables to determine the active profiles. 
-In these cases, you should set the corresponding environment variable—such as APP_PROVIDER_PROFILE—to either "on" or "off". This approach is necessary because Docker does not inherently expose profile configuration details within the Docker Compose file or inside the container environments.
-
-### Environment
-
-There are two distinct types of environment files:
-
-- Files used primarily for Docker Compose configuration.
-- Files intended for Docker container environment settings.
-
-The first category includes files such as `.env`, `.env.local`, `${LOCALNET_DIR}/env/common.env`, and any `compose.env` files from the modules. The second category encompasses the remaining files found under `${LOCALNET_DIR}/env` as well as the `env` directories within the modules.
-
-In the Docker container environment files, you can reference variables defined in the Docker Compose environment. Simply declare a variable as `VAR=${VAR}` to ensure that the value from the Docker Compose environment is available within the container.
-
-
-### Dynamic Configuration
-
-In certain situations, it is necessary to share runtime information between services. For instance, in the case of the `backend-service`, the environment variable `APP_PROVIDER_PARTY` is mandatory. In a production-like environment, this information would typically be provided manually by a system administrator. The party ID becomes available only after the complete initialization of Canton/Splice. To automate this process, one might consider retrieving the party ID by querying the JSON Ledger API HTTP endpoint; however, adding extra environment variables to support JWT token retrieval for this purpose could clutter the backend service configuration.
-
-A preferable solution is to leverage the existing `splice-onboarding` service, which already possesses the appropriate environment and tools to perform this task. By mounting a custom script into the splice-onboarding container (for example, mapping `./docker/backend-service/onboarding/onboarding.sh` to `/app/scripts/on/backend-service.sh`), the splice-onboarding service executes the script (or any script located in the `/app/scripts/on/` directory) at the conclusion of its initialization routine.
-
-Within the script, the acquired information can be shared with the backend service as follows:
-```
-  share_file "backend-service/on/backend-service.sh" <<EOF
-  export APP_PROVIDER_PARTY=${APP_PROVIDER_PARTY}
-EOF
-```
-In this context, `share_file` is a utility function that writes the provided content (the second argument) to the specified file (the first argument) on the shared volume `onboarding`. This volume is also mounted in the `backend-service`, and the startup script (docker/backend-service/start.sh) sources the newly shared script prior to executing the main command of the backend service, thereby ensuring that the `APP_PROVIDER_PARTY` environment variable is available to the service.
-
-## Local Development
-
-### Frontend
-
-#### Restart frontend
-Run:
-```bash
-make restart-frontend
-```
-This target restarts the frontend and handles any required rebuilds.
-
-#### Vite development
-Use Vite's hot-module reloading for fast UI iteration:
-
-```bash
-make start-vite-dev
-```
-or, if Quickstart is already running:
-```bash
-make vite-dev
-```
-Open the app at: http://app-provider.localhost:5173
-
-Note: Use the same host/port so OAuth redirects (Keycloak) continue to work.
-
-#### Debugging in VS Code
-Create or update quickstart/frontend/.vscode/launch.json with:
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Vite: Chrome Debug",
-      "type": "chrome",
-      "request": "launch",
-      "url": "http://app-provider.localhost:5173",
-      "webRoot": "${workspaceFolder}/quickstart/frontend/src"
-    }
-  ]
-}
-```
-
-This launches Chrome against the Vite server and maps breakpoints to your source files. If you change user sessions (login/logout) or Keycloak redirects occur, reload the page so VS Code can resolve sources.
-
-### Backend service
-
-#### Restart backend
-Run:
-```bash
-make restart-backend
-```
-This target restarts the backend, handles dependent services (e.g., register-app-user-tenant), and rebuilds the service if needed.
-
-#### Debug backend service
-Enable remote JVM debugging by setting:
-```bash
-export DEBUG_ENABLED=true
-make restart-backend
-```
-This opens port 5005. Use the following JVM agent options for your remote debugger:
-```
--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
-```
-Configure your IDE (IntelliJ, VS Code) to attach to port 5005 for step-through debugging.
-
-Example in IntelliJ Idea
-![remote-debug-settings](sdk/docs/images/remote-debug-settings.png)
-
-### Viewing logs
-For interactive local log inspection we recommend lnav (https://lnav.org/). Install the Canton log format and use it to view ``*.clog`` files. Example Canton lnav format definition:
-https://github.com/hyperledger-labs/splice/blob/main/canton/canton-json.lnav.json
-
-Open the logs directory with lnav to filter and analyze logs efficiently.
-
-
-
-
-## License
-
-**You may use the contents of this repository in parts or in whole according to the `0BSD` license.**
-
-Copyright &copy; 2026 Digital Asset (Switzerland) GmbH and/or its affiliates
-
-> Permission to use, copy, modify, and/or distribute this software for
-> any purpose with or without fee is hereby granted.
->
-> THE SOFTWARE IS PROVIDED “AS IS” AND THE AUTHOR DISCLAIMS ALL
-> WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
-> OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE
-> FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
-> DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
-> AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
-> OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-message.txt
-34 KB
+*Built at ETHDenver by Jacob, Manu, and Vatsal*
