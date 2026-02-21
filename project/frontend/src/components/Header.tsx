@@ -18,7 +18,7 @@ const Header: React.FC = () => {
 
     const isCompany = myProfile?.type === 'COMPANY';
     const isInstitution = myProfile?.type === 'INSTITUTION';
-    const accent = isCompany ? '#FF4B6E' : isInstitution ? '#C9956C' : '#FF4B6E';
+    const accent = isCompany ? 'var(--c-primary)' : isInstitution ? 'var(--c-gold)' : 'var(--c-primary)';
 
     const handleLogout = () => {
         logout();
@@ -33,8 +33,8 @@ const Header: React.FC = () => {
             background: 'rgba(255,255,255,0.72)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            borderBottom: '1px solid rgba(255,75,110,0.15)',
-            boxShadow: '0 2px 20px rgba(255,75,110,0.08)',
+            borderBottom: '1px solid var(--c-border)',
+            boxShadow: 'var(--c-shadow)',
         }}>
             <div style={{
                 maxWidth: 1200,
@@ -52,23 +52,13 @@ const Header: React.FC = () => {
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.97 }}
                     >
-                        <motion.span
-                            animate={{ rotate: [-8, 8, -8], y: [0, -3, 0] }}
-                            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                            style={{ fontSize: 22, lineHeight: 1 }}
-                        >
-                            💘
-                        </motion.span>
                         <span style={{
                             fontSize: 17,
                             fontWeight: 900,
-                            background: 'linear-gradient(135deg, #FF4B6E 0%, #C9956C 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text',
+                            color: 'var(--c-text)',
                             letterSpacing: '-0.3px',
                         }}>
-                            Canton Invoice Finance
+                            Invoice Now
                         </span>
                     </motion.div>
                 </Link>
@@ -89,9 +79,7 @@ const Header: React.FC = () => {
                                         borderRadius: 999,
                                         fontSize: 13,
                                         fontWeight: 700,
-                                        background: isCompany
-                                            ? 'rgba(255,75,110,0.1)'
-                                            : 'rgba(201,149,108,0.12)',
+                                        background: 'var(--c-border)',
                                         color: accent,
                                         border: `1.5px solid ${accent}30`,
                                     }}
@@ -110,9 +98,9 @@ const Header: React.FC = () => {
                                 style={{
                                     padding: '6px 16px',
                                     borderRadius: 999,
-                                    border: `1.5px solid rgba(255,75,110,0.3)`,
+                                    border: `1.5px solid var(--c-border)`,
                                     background: 'transparent',
-                                    color: '#9E6B7D',
+                                    color: 'var(--c-muted)',
                                     fontSize: 13,
                                     fontWeight: 600,
                                     cursor: 'pointer',
@@ -131,12 +119,12 @@ const Header: React.FC = () => {
                                     display: 'inline-block',
                                     padding: '6px 18px',
                                     borderRadius: 999,
-                                    background: 'linear-gradient(135deg, #FF4B6E, #C9956C)',
-                                    color: '#fff',
+                                    background: 'var(--c-primary)',
+                                    color: 'var(--c-bg)',
                                     textDecoration: 'none',
                                     fontSize: 13,
                                     fontWeight: 700,
-                                    boxShadow: '0 3px 12px rgba(255,75,110,0.35)',
+                                    boxShadow: '0 3px 12px rgba(0,0,0,0.15)',
                                 }}
                             >
                                 Get Started →

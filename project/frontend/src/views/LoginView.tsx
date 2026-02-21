@@ -23,8 +23,11 @@ const LoginView: React.FC = () => {
     const toast = useToast();
     const { register } = useProfile();
 
-    // Role comes from the SelectRoleView — fall back to COMPANY
-    const storedRole = localStorage.getItem('cupid-role') as 'COMPANY' | 'INSTITUTION' | null;
+    // Role comes from the SelectRoleView — fall back to COMPANY ('cupid-role' is backward compat)
+    const storedRole = (
+        localStorage.getItem('user-role') ??
+        localStorage.getItem('cupid-role')
+    ) as 'COMPANY' | 'INSTITUTION' | null;
     const role: 'COMPANY' | 'INSTITUTION' = storedRole ?? 'COMPANY';
     const isCompany = role === 'COMPANY';
 
@@ -61,7 +64,7 @@ const LoginView: React.FC = () => {
     }, []);
 
     const isOAuth2 = featureFlags?.authMode === 'oauth2';
-    const accent = isCompany ? '#FF4B6E' : '#C9956C';
+    const accent = isCompany ? 'var(--c-primary)' : 'var(--c-gold)';
     const roleIcon = isCompany ? '🏭' : '🏦';
     const roleLabel = isCompany ? 'Company' : 'Institution';
 
@@ -98,7 +101,7 @@ const LoginView: React.FC = () => {
             <PageShell>
                 <GlassCard accent={accent}>
                     <RoleHeader icon={roleIcon} label={roleLabel} accent={accent} />
-                    <p style={{ textAlign: 'center', color: '#9E6B7D', fontSize: 14, marginBottom: 24 }}>
+                    <p style={{ textAlign: 'center', color: 'var(--c-muted)', fontSize: 14, marginBottom: 24 }}>
                         Sign in with your {roleLabel} account
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -110,10 +113,10 @@ const LoginView: React.FC = () => {
                                 whileTap={{ scale: 0.98 }}
                                 style={{
                                     display: 'block', padding: '14px 20px',
-                                    background: accent, color: '#fff',
+                                    background: accent, color: 'var(--c-bg)',
                                     borderRadius: 12, textDecoration: 'none',
                                     fontWeight: 800, fontSize: 15, textAlign: 'center',
-                                    boxShadow: `0 4px 18px ${accent}50`,
+                                    boxShadow: '0 4px 18px rgba(0,0,0,0.14)',
                                 }}
                             >
                                 {link.name} →
@@ -130,7 +133,7 @@ const LoginView: React.FC = () => {
                                     whileHover={{ scale: 1.02 }}
                                     style={{
                                         display: 'block', padding: '13px 20px',
-                                        background: '#FFF0F5', color: accent,
+                                        background: 'var(--c-bg)', color: accent,
                                         border: `2px solid ${accent}`,
                                         borderRadius: 12, textDecoration: 'none',
                                         fontWeight: 700, fontSize: 15, textAlign: 'center',
@@ -162,7 +165,7 @@ const LoginView: React.FC = () => {
                     <RoleHeader icon={roleIcon} label={`Create ${roleLabel} Account`} accent={accent} />
                     <form onSubmit={handleSignupSubmit}>
                         <Field label="Username *" hint="Lowercase letters, digits, - and _ only">
-                            <CupidInput
+                            <FormInput
                                 value={signupUsername}
                                 onChange={e => setSignupUsername(e.target.value)}
                                 placeholder={isCompany ? 'acme-corp' : 'first-capital-bank'}
@@ -171,7 +174,7 @@ const LoginView: React.FC = () => {
                             />
                         </Field>
                         <Field label="Password" hint="Leave blank for demo default">
-                            <CupidInput
+                            <FormInput
                                 type="password"
                                 value={signupPassword}
                                 onChange={e => setSignupPassword(e.target.value)}
@@ -180,7 +183,7 @@ const LoginView: React.FC = () => {
                             />
                         </Field>
                         <Field label={isCompany ? 'Company Name *' : 'Institution Name *'}>
-                            <CupidInput
+                            <FormInput
                                 value={signupDisplayName}
                                 onChange={e => setSignupDisplayName(e.target.value)}
                                 placeholder={isCompany ? 'Acme Manufacturing Corp' : 'First Capital Bank'}
@@ -191,7 +194,7 @@ const LoginView: React.FC = () => {
                             <select
                                 value={signupSector}
                                 onChange={e => setSignupSector(e.target.value)}
-                                style={{ ...cupidInputStyle(accent), cursor: 'pointer' }}
+                                style={{ ...inputStyle(accent), cursor: 'pointer' }}
                             >
                                 {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
@@ -203,10 +206,10 @@ const LoginView: React.FC = () => {
                             whileTap={{ scale: loading ? 1 : 0.97 }}
                             style={{
                                 width: '100%', padding: '14px 0', marginTop: 8,
-                                background: loading ? '#D4A0AD' : accent,
-                                color: '#fff', border: 'none', borderRadius: 12,
+                                background: loading ? 'var(--c-border)' : accent,
+                                color: loading ? 'var(--c-muted)' : 'var(--c-bg)', border: 'none', borderRadius: 12,
                                 fontWeight: 800, fontSize: 16, cursor: loading ? 'wait' : 'pointer',
-                                boxShadow: `0 4px 18px ${accent}40`,
+                                boxShadow: '0 4px 18px rgba(0,0,0,0.12)',
                             }}
                         >
                             {loading ? 'Creating account…' : `Create ${roleLabel} Account →`}
@@ -231,17 +234,17 @@ const LoginView: React.FC = () => {
         <PageShell>
             <GlassCard accent={accent}>
                 <RoleHeader icon={roleIcon} label={`Sign in as ${roleLabel}`} accent={accent} />
-                <p style={{ textAlign: 'center', color: '#9E6B7D', fontSize: 14, marginBottom: 24 }}>
+                <p style={{ textAlign: 'center', color: 'var(--c-muted)', fontSize: 14, marginBottom: 24 }}>
                     Enter your credentials to continue
                 </p>
 
                 <form name="f" action="/login/shared-secret" method="POST">
                     <input type="hidden" name="intent" value={role.toLowerCase()} />
                     <Field label="Username">
-                        <CupidInput name="username" placeholder="your-username" accent={accent} autoFocus />
+                        <FormInput name="username" placeholder="your-username" accent={accent} autoFocus />
                     </Field>
                     <Field label="Password">
-                        <CupidInput name="password" type="password" placeholder="your-password" accent={accent} />
+                        <FormInput name="password" type="password" placeholder="your-password" accent={accent} />
                     </Field>
                     <motion.button
                         type="submit"
@@ -249,17 +252,17 @@ const LoginView: React.FC = () => {
                         whileTap={{ scale: 0.97 }}
                         style={{
                             width: '100%', padding: '14px 0', marginTop: 4,
-                            background: accent, color: '#fff', border: 'none',
+                            background: accent, color: 'var(--c-bg)', border: 'none',
                             borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer',
-                            boxShadow: `0 4px 18px ${accent}45`,
+                            boxShadow: '0 4px 18px rgba(0,0,0,0.14)',
                         }}
                     >
                         Sign In →
                     </motion.button>
                 </form>
 
-                <div style={{ marginTop: 14, background: 'rgba(255,75,110,0.07)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#9E6B7D' }}>
-                    <strong style={{ display: 'block', marginBottom: 4 }}>Demo accounts</strong>
+                <div style={{ marginTop: 14, background: 'var(--c-border)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--c-muted)' }}>
+                    <strong style={{ display: 'block', marginBottom: 4, color: 'var(--c-text)' }}>Demo accounts</strong>
                     <div>Company: <code style={{ color: accent }}>app-provider</code> / <code style={{ color: accent }}>abc123</code></div>
                     <div>Institution: <code style={{ color: accent }}>app-user</code> / <code style={{ color: accent }}>abc123</code></div>
                 </div>
@@ -283,7 +286,6 @@ const LoginView: React.FC = () => {
 const PageShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(160deg, #FFF0F5 0%, #FFE4EE 50%, #FFF5E8 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '40px 24px',
     }}>
@@ -300,19 +302,19 @@ const PageShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const GlassCard: React.FC<{ accent: string; children: React.ReactNode }> = ({ children }) => (
     <div style={{
-        background: 'rgba(255,255,255,0.78)',
+        background: 'var(--c-glass)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
-        border: `1.5px solid rgba(255,75,110,0.2)`,
+        border: `1.5px solid var(--c-border)`,
         borderRadius: 24,
         padding: '36px 32px',
-        boxShadow: `0 12px 40px rgba(255,75,110,0.14), 0 0 0 1px rgba(255,75,110,0.08)`,
+        boxShadow: 'var(--c-shadow)',
     }}>
         {children}
     </div>
 );
 
-const RoleHeader: React.FC<{ icon: string; label: string; accent: string }> = ({ icon, label, accent: _accent }) => (
+const RoleHeader: React.FC<{ icon: string; label: string; accent: string }> = ({ icon, label }) => (
     <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <motion.div
             animate={{ rotate: [-5, 5, -5], y: [0, -4, 0] }}
@@ -323,8 +325,7 @@ const RoleHeader: React.FC<{ icon: string; label: string; accent: string }> = ({
         </motion.div>
         <h2 style={{
             margin: 0, fontSize: 22, fontWeight: 800,
-            background: 'linear-gradient(135deg, #FF4B6E, #C9956C)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            color: 'var(--c-text)',
         }}>
             {label}
         </h2>
@@ -333,38 +334,38 @@ const RoleHeader: React.FC<{ icon: string; label: string; accent: string }> = ({
 
 const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
     <div style={{ marginBottom: 14, textAlign: 'left' }}>
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#2D0A1A', marginBottom: 4 }}>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--c-text)', marginBottom: 4 }}>
             {label}
         </label>
-        {hint && <div style={{ fontSize: 11, color: '#C9956C', marginBottom: 4 }}>{hint}</div>}
+        {hint && <div style={{ fontSize: 11, color: 'var(--c-muted)', marginBottom: 4 }}>{hint}</div>}
         {children}
     </div>
 );
 
-const cupidInputStyle = (_accent: string): React.CSSProperties => ({
+const inputStyle = (_accent: string): React.CSSProperties => ({
     width: '100%', padding: '11px 14px',
-    border: `2px solid rgba(255,75,110,0.2)`,
+    border: `2px solid var(--c-border)`,
     borderRadius: 10, fontSize: 14, outline: 'none',
     boxSizing: 'border-box',
-    background: 'rgba(255,255,255,0.9)',
-    color: '#2D0A1A',
+    background: 'var(--c-glass)',
+    color: 'var(--c-text)',
     transition: 'border-color 0.2s',
 });
 
-const CupidInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { accent: string }> = ({ accent, ...props }) => (
+const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { accent: string }> = ({ accent, ...props }) => (
     <input
         {...props}
-        style={cupidInputStyle(accent)}
-        onFocus={e => { e.target.style.borderColor = accent; e.target.style.boxShadow = `0 0 0 3px ${accent}20`; }}
-        onBlur={e => { e.target.style.borderColor = 'rgba(255,75,110,0.2)'; e.target.style.boxShadow = 'none'; }}
+        style={inputStyle(accent)}
+        onFocus={e => { e.target.style.borderColor = accent; e.target.style.boxShadow = `0 0 0 3px rgba(0,0,0,0.08)`; }}
+        onBlur={e => { e.target.style.borderColor = 'var(--c-border)'; e.target.style.boxShadow = 'none'; }}
     />
 );
 
 const Divider = () => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,75,110,0.15)' }} />
-        <span style={{ fontSize: 12, color: '#C9956C' }}>or</span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,75,110,0.15)' }} />
+        <div style={{ flex: 1, height: 1, background: 'var(--c-border)' }} />
+        <span style={{ fontSize: 12, color: 'var(--c-muted)' }}>or</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--c-border)' }} />
     </div>
 );
 
@@ -383,7 +384,7 @@ const BackLink: React.FC<{ onClick: () => void }> = ({ onClick }) => (
         style={{
             display: 'block', width: '100%', marginTop: 16,
             background: 'none', border: 'none',
-            color: '#C9956C', cursor: 'pointer', fontSize: 13,
+            color: 'var(--c-muted)', cursor: 'pointer', fontSize: 13,
             textAlign: 'center',
         }}
     >

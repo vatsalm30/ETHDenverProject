@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.openapitools.model.UserProfileDto;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -625,7 +627,7 @@ public class InvoiceFinanceApiImpl implements
                             "Provisional suppliers are limited to $5,000 per invoice");
                 }
 
-                return ledger.createAndGetId(auction, commandId)
+                return withLedgerRetry(() -> ledger.createAndGetId(auction, commandId), 5, 3000L)
                     .thenApply(auctionCid -> {
                         String auctionCidStr = auctionCid.getContractId;
                         // Remove from pending map
@@ -1533,6 +1535,30 @@ public class InvoiceFinanceApiImpl implements
     private static int toIntVal(Object v) {
         if (v instanceof Number n) return n.intValue();
         return 0;
+    }
+
+    /**
+     * Retries a ledger operation when Canton is temporarily unavailable (gRPC UNAVAILABLE).
+     * Canton restarts every ~20-30s in the demo; retrying with a short delay allows the
+     * operation to succeed once Canton comes back up.
+     */
+    private <T> CompletableFuture<T> withLedgerRetry(
+            Supplier<CompletableFuture<T>> operation,
+            int attemptsLeft,
+            long delayMs) {
+        return operation.get().exceptionallyCompose(ex -> {
+            Throwable cause = ex instanceof java.util.concurrent.CompletionException ? ex.getCause() : ex;
+            boolean isUnavailable = cause instanceof io.grpc.StatusRuntimeException sre &&
+                    sre.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE;
+            if (!isUnavailable || attemptsLeft <= 1) {
+                return CompletableFuture.failedFuture(ex);
+            }
+            logger.warn("Canton unavailable, retrying in {}ms ({} attempts left)...", delayMs, attemptsLeft - 1);
+            var delayed = new CompletableFuture<Void>();
+            CompletableFuture.delayedExecutor(delayMs, TimeUnit.MILLISECONDS)
+                    .execute(() -> delayed.complete(null));
+            return delayed.thenCompose(v -> withLedgerRetry(operation, attemptsLeft - 1, delayMs));
+        });
     }
 
     private FinancedInvoiceDto toFinancedInvoiceDto(com.digitalasset.quickstart.pqs.Contract<FinancedInvoice> c) {
