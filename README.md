@@ -1,3 +1,199 @@
+Zara
+zaraa2212_82900
+Online
+
+jacob — Yesterday at 12:36 PM
+Checked in.     Meat the check in booth. Hacking.
+jacob — Yesterday at 12:59 PM
+Near*
+manu — Yesterday at 1:50 PM
+Docs.canton.network
+vatsal — Yesterday at 3:42 PM
+https://docs.google.com/document/d/1yQebgfAsQ4nnfQ5UcA3-QFMDjKT3gnNJpmstipqhTio/edit?tab=t.0
+manu — Yesterday at 4:20 PM
+omw back guys took a lot longer than I expected 😭
+jacob — Yesterday at 5:21 PM
+DevFolio:
+Here are the four paragraphs:
+
+**1. The Problem It Solves**
+Invoice financing represents a $3+ trillion global market built on a fundamental structural inefficiency: suppliers who have completed legitimate work and hold confirmed invoices are forced to wait 30, 60, or even 90 days for payment while their capital sits frozen in receivables. This liquidity gap creates cascading operational risk — suppliers cannot pay their own vendors, fund new production, or invest in growth while waiting on buyers to fulfill payment terms. The existing solutions to this problem are fragmented and opaque: traditional factoring companies offer take-it-or-leave-it rates with no competitive transparency, and suppliers have no mechanism to verify whether the terms they receive reflect fair market pricing. Deadline Derby addresses this directly by creating a competitive Dutch auction marketplace where suppliers can sell confirmed invoices immediately, financiers bid in real time for the right to fund those invoices, and the resulting market dynamics produce rates anchored to genuine supply and demand rather than a single intermediary's margin requirements.
+
+**2. How It Improves Existing Processes**
+
+message.txt
+6 KB
+jacob — Yesterday at 5:37 PM
+Also in the doc @vatsal
+Let me know when you guys are heading back to the hotel?
+jacob — Yesterday at 6:16 PM
+Where
+jacob — Yesterday at 6:40 PM
+Guys I’m leaving I’m sorry
+I’ll see you back at hote
+L
+Ik
+Uber is leaving in 10 minutes if anyone can make it
+vatsal — Yesterday at 6:48 PM
+yeah sure
+vatsal — Yesterday at 8:18 PM
+@jacob we’re back at the hotel
+come down to the lobby
+jacob — Yesterday at 8:20 PM
+Omw
+manu — Yesterday at 9:19 PM
+https://claude.ai/public/artifacts/ed866a60-477c-4137-b5f2-8d74f323b596
+Claude
+Canton Invoice Finance Architecture — Full Technical Guide
+Explore Canton's complete invoice financing system: ZK proofs, trust scoring, sealed-bid auctions, and decentralized settlement on the Canton Network.
+Canton Invoice Finance Architecture — Full Technical Guide
+manu — Yesterday at 9:42 PM
+https://claude.ai/public/artifacts/028239fa-1231-43d1-b5b7-6c777108d83b
+Claude
+canton-f1-ui-v2.html
+canton-f1-ui-v2.html
+canton-f1-ui-v2.html
+jacob — Yesterday at 9:46 PM
+jgutwein@purdue.edu
+Z5ten15q9*
+manu — Yesterday at 9:50 PM
+https://claude.ai/public/artifacts/cf59fbbf-9dff-496e-9e0f-01830ba40b5e
+Claude
+canton-full-ui.html
+canton-full-ui.html
+canton-full-ui.html
+maybe final ui??
+jacob — Yesterday at 10:17 PM
+Image
+manu — 1:07 AM
+https://docs.google.com/document/d/1XfLRzE1fVmOkiE--LJ48gytty3kPVF7EO9bTrjkjRTQ/edit?usp=sharing
+Google Docs
+demo doc
+jacob — 1:39 AM
+Image
+Potential logo
+vatsal — 2:56 AM
+Image
+manu — 3:03 AM
+cd /Users/manasvimeka/ETHDenverProject/zk-bank-service
+npm install
+MOCK_ZK=true node src/server.js
+manu — 4:14 AM
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canton Invoice Finance — Full Architecture</title>
+
+message.txt
+33 KB
+vatsal — 6:35 AM
+# Deadline Derby / Canton Quickstart — Single Run Guide
+
+This is the **one main document** for the repository.
+All setup, run, development, testing, architecture, security, and ops notes were condensed here.
+
+---
+## 1) What this project is
+
+Full-stack Canton Network app scaffold + ETHDenver invoice-finance flow:
+- Daml smart contracts
+- Spring Boot backend
+- React + Vite frontend
+- Docker Compose runtime (participant, validator, DB, auth, optional observability)
+
+Main working directory for commands:
+```bash
+cd project
+```
+
+---
+## 2) Prerequisites
+
+Minimum recommended:
+- Docker + Docker Compose (Docker memory: **8 GB+**)
+- Make
+- Node.js + npm
+- Java 21 (for local build tooling)
+- Daml SDK (can be installed/updated via Make target)
+
+If environment tooling is configured in this repo:
+---
+
+## 3) Fastest way to run (first time)
+
+From repository root:
+```bash
+cd project
+make setup
+make build
+make start
+```
+### What `make setup` asks you
+
+- auth mode: `oauth2` (default) or `shared-secret`
+- observability on/off
+- test mode on/off
+You can re-run `make setup` any time.
+
+---
+## 4) Main URLs after startup
+
+- App frontend: http://app-provider.localhost:3000
+- App user wallet: http://wallet.localhost:2000
+- App provider wallet: http://wallet.localhost:3000
+- ANS UIs: http://ans.localhost:2000 and http://ans.localhost:3000
+- Backend API: http://localhost:8080
+- Swagger UI (host): http://localhost:9090
+
+If enabled:
+- Keycloak: http://keycloak.localhost:8082
+- Grafana: http://localhost:3030
+- SV UI: http://sv.localhost:4000
+- Scan UI: http://scan.localhost:4000
+
+---
+## 5) Daily commands (project/)
+
+```bash
+make start              # start services
+make stop               # stop services
+make status             # container status
+make logs               # logs
+make tail               # follow logs
+
+make build              # full build
+make build-daml         # Daml + DARs
+make build-backend      # backend build
+make build-frontend     # frontend build
+
+make restart-backend
+make restart-frontend
+
+make clean-all          # wipe artifacts, containers, volumes
+make install-daml-sdk   # install/upgrade Daml SDK
+```
+
+---
+
+## 6) Frontend local dev (hot reload)
+
+Terminal A (from `project/`):
+
+```bash
+make start-vite-dev
+```
+
+Terminal B (from `project/frontend/`):
+
+```bash
+npm run dev
+... (643 lines left)
+
+message.txt
+34 KB
+﻿
 # Deadline Derby / Canton Quickstart — Single Run Guide
 
 This is the **one main document** for the repository.
@@ -740,3 +936,5 @@ Copyright &copy; 2026 Digital Asset (Switzerland) GmbH and/or its affiliates
 > DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
 > AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 > OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+message.txt
+34 KB
