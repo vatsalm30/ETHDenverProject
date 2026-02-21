@@ -5,6 +5,7 @@ import React from 'react';
 import './App.css';
 import { Routes, Route } from 'react-router-dom';
 import { ToastProvider } from './stores/toastStore';
+import { ThemeProvider } from './stores/themeStore';
 import HomeView from './views/HomeView';
 import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
@@ -18,6 +19,7 @@ import { ProfileProvider } from './stores/profileStore';
 
 const App: React.FC = () => {
     const AppProviders = composeProviders(
+        ThemeProvider,
         ToastProvider,
         UserProvider,
         InvoiceFinanceProvider,

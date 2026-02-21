@@ -6,10 +6,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useUserStore } from '../stores/userStore';
 import { useProfile } from '../stores/profileStore';
+import { useTheme } from '../stores/themeStore';
 
 const Header: React.FC = () => {
     const { user, loading, fetchUser, logout } = useUserStore();
     const { myProfile } = useProfile();
+    const { theme, toggle } = useTheme();
     const navigate = useNavigate();
 
     React.useEffect(() => {
@@ -30,7 +32,7 @@ const Header: React.FC = () => {
             position: 'sticky',
             top: 0,
             zIndex: 1000,
-            background: 'rgba(255,255,255,0.72)',
+            background: 'var(--c-glass)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             borderBottom: '1px solid var(--c-border)',
@@ -53,10 +55,13 @@ const Header: React.FC = () => {
                         whileTap={{ scale: 0.97 }}
                     >
                         <span style={{
-                            fontSize: 17,
+                            fontSize: 18,
                             fontWeight: 900,
-                            color: 'var(--c-text)',
-                            letterSpacing: '-0.3px',
+                            background: 'var(--c-gradient)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            letterSpacing: '-0.5px',
                         }}>
                             Invoice Now
                         </span>
@@ -65,6 +70,30 @@ const Header: React.FC = () => {
 
                 {/* Right side */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {/* Theme toggle */}
+                    <motion.button
+                        onClick={toggle}
+                        whileHover={{ scale: 1.08 }}
+                        whileTap={{ scale: 0.93 }}
+                        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                        style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 999,
+                            border: '1.5px solid var(--c-border)',
+                            background: 'transparent',
+                            color: 'var(--c-muted)',
+                            fontSize: 16,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                        }}
+                    >
+                        {theme === 'light' ? '🌙' : '☀️'}
+                    </motion.button>
+
                     {!loading && user !== null && (
                         <>
                             {myProfile && (
@@ -98,7 +127,7 @@ const Header: React.FC = () => {
                                 style={{
                                     padding: '6px 16px',
                                     borderRadius: 999,
-                                    border: `1.5px solid var(--c-border)`,
+                                    border: '1.5px solid var(--c-border)',
                                     background: 'transparent',
                                     color: 'var(--c-muted)',
                                     fontSize: 13,
@@ -119,12 +148,12 @@ const Header: React.FC = () => {
                                     display: 'inline-block',
                                     padding: '6px 18px',
                                     borderRadius: 999,
-                                    background: 'var(--c-primary)',
-                                    color: 'var(--c-bg)',
+                                    background: 'var(--c-gradient)',
+                                    color: '#fff',
                                     textDecoration: 'none',
                                     fontSize: 13,
                                     fontWeight: 700,
-                                    boxShadow: '0 3px 12px rgba(0,0,0,0.15)',
+                                    boxShadow: '0 3px 12px rgba(79,70,229,0.25)',
                                 }}
                             >
                                 Get Started →

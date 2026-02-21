@@ -1,31 +1,52 @@
-/* Cupid Theme — Canton Invoice Finance */
+/* Invoice — Design System */
 
+/* ── Light mode ── */
 :root {
-  --c-bg:       #FFF0F5;
-  --c-primary:  #FF4B6E;
-  --c-dark:     #D93058;
-  --c-gold:     #C9956C;
-  --c-text:     #2D0A1A;
-  --c-muted:    #9E6B7D;
-  --c-glass:    rgba(255, 255, 255, 0.72);
-  --c-border:   rgba(255, 75, 110, 0.18);
-  --c-shadow:   0 8px 32px rgba(255, 75, 110, 0.18);
-  --c-gradient: linear-gradient(135deg, #FF4B6E 0%, #C9956C 100%);
-  --c-success:  #10b981;
-  --c-warn:     #f59e0b;
+  --c-bg:        #F8FAFF;
+  --c-bg-grad:   linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 50%, #F8FAFF 100%);
+  --c-primary:   #4F46E5;
+  --c-dark:      #3730A3;
+  --c-gold:      #7C3AED;
+  --c-text:      #0F172A;
+  --c-muted:     #64748B;
+  --c-glass:     rgba(255, 255, 255, 0.82);
+  --c-modal-bg:  rgba(255, 255, 255, 0.97);
+  --c-border:    rgba(79, 70, 229, 0.14);
+  --c-shadow:    0 4px 24px rgba(79, 70, 229, 0.10);
+  --c-gradient:  linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  --c-success:   #10b981;
+  --c-warn:      #f59e0b;
+  --c-error:     #ef4444;
+}
+
+/* ── Dark mode ── */
+[data-theme="dark"] {
+  --c-bg:        #0F172A;
+  --c-bg-grad:   linear-gradient(135deg, #0F172A 0%, #1E1B4B 60%, #0C1A2E 100%);
+  --c-primary:   #818CF8;
+  --c-dark:      #A5B4FC;
+  --c-gold:      #A78BFA;
+  --c-text:      #F1F5F9;
+  --c-muted:     #94A3B8;
+  --c-glass:     rgba(15, 23, 42, 0.82);
+  --c-modal-bg:  rgba(15, 23, 42, 0.97);
+  --c-border:    rgba(129, 140, 248, 0.18);
+  --c-shadow:    0 4px 24px rgba(0, 0, 0, 0.40);
+  --c-gradient:  linear-gradient(135deg, #818CF8 0%, #A78BFA 100%);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
-  background: var(--c-bg);
+  background: var(--c-bg-grad);
+  background-attachment: fixed;
   color: var(--c-text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   margin: 0;
   min-height: 100vh;
+  transition: background 0.3s ease, color 0.2s ease;
 }
 
-/* Override Bootstrap container to full-bleed Cupid layout */
 main.container {
   max-width: 100% !important;
   padding: 0 !important;
@@ -38,7 +59,7 @@ main.container {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--c-border);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: var(--c-shadow);
 }
 
@@ -55,7 +76,7 @@ main.container {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 999px; }
 
-/* table legacy */
+/* Table utilities */
 .table.table-fixed { table-layout: fixed; width: 100%; }
 .ellipsis-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: middle; }
 .table.nowrap td, .table.nowrap th { white-space: nowrap; }
