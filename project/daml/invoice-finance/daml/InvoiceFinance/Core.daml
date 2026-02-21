@@ -7,7 +7,7 @@
 --   * Suppliers create invoices; buyers confirm them.
 --   * The platform (operator) co-signs every contract, enabling the backend
 --     to submit on behalf of all roles using a single service account.
---   * During the Dutch auction ALL eligible banks are observers — they see
+--   * During the auction ALL eligible banks are observers — they see
 --     the auction parameters but NOT the winning bid details.
 --   * WinningBid is ONLY visible to operator + winning bank.
 --     Losing banks are completely blind: they never learn who won or at what rate.
