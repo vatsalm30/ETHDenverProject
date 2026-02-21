@@ -6,3 +6,4 @@ packages:
 - ./licensing
 - ./licensing-tests
 - ./invoice-finance
+- ./invoice-finance-tests

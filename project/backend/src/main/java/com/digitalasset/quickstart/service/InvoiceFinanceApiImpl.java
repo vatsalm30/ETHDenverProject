@@ -449,7 +449,8 @@ public class InvoiceFinanceApiImpl implements
                     var auctionContract = ensurePresent(opt, "Auction not found: %s", contractId);
                     var grabChoice = new FinancingAuction_BankGrab(
                             new Party(req.getBankParty()),
-                            BigDecimal.valueOf(req.getOfferedRate())
+                            BigDecimal.valueOf(req.getOfferedRate()),
+                            Optional.empty()  // No oracle guardrail for grabAuction (future: pass req.getOracleContractId())
                     );
                     // Step 1: bank grabs → creates WinningBid
                     return ledger.exerciseAndGetResult(auctionContract.contractId, grabChoice, commandId)

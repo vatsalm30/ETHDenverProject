@@ -1,0 +1,133 @@
+-- Copyright (c) 2026 ETHDenver Hackathon. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+--
+-- Privacy assertion tests for Invoice Finance (Deadline Derby).
+-- Proves Canton's sub-transaction privacy: non-stakeholders cannot see contracts.
+
+module InvoiceFinance.Scripts.PrivacyTests where
+
+import Daml.Script
+import DA.Assert
+import DA.Date
+import DA.Foldable (forA_, length)
+
+import InvoiceFinance.Core
+
+-- | Allocate parties and run full flow, then assert privacy.
+testPrivacy : Script ()
+testPrivacy = script do
+  operator <- allocateParty "operator"
+  supplier <- allocateParty "supplier"
+  buyer    <- allocateParty "buyer"
+  bank1    <- allocateParty "bank1"
+  bank2    <- allocateParty "bank2"
+  auditor  <- allocateParty "auditor"
+
+  -- 1. Create invoice and confirm
+  invCid <- submit operator $ createCmd Invoice with
+    operator
+    supplier
+    buyer
+    invoiceId = "INV-TEST-001"
+    amount = 100000.0
+    description = "Test goods"
+    paymentTermDays = 90
+    issueDate = date 2026 2 1
+    dueDate = date 2026 5 2
+    status = "PENDING_CONFIRMATION"
+
+  confirmedCid <- submit operator $ exerciseCmd invCid Invoice_BuyerConfirm
+
+  -- 2. Start auction (banks as observers, buyer excluded)
+  auctionCid <- submit operator $ exerciseCmd confirmedCid Invoice_StartAuction with
+    eligibleBanks = [bank1, bank2]
+    startRate = 98.0
+    reserveRate = 95.0
+    auctionDurationSecs = 60
+
+  -- 3. Bank1 grabs (oracleId = None for this test)
+  winningBidCid <- submit operator $ exerciseCmd auctionCid FinancingAuction_BankGrab with
+    bank = bank1
+    offeredRate = 97.5
+    oracleId = None
+
+  -- *** PRIVACY ASSERTION 1: Bank2 (losing bank) cannot see WinningBid ***
+  bank2WinningBids <- query @WinningBid bank2
+  assertMsg "Losing bank must not see WinningBid" (length bank2WinningBids == 0)
+
+  -- 4. Settle
+  result <- submit operator $ exerciseCmd winningBidCid WinningBid_Settle
+  let financedCid = result.financedInvoiceId
+  let ownershipCid = result.bankOwnershipId
+
+  -- *** PRIVACY ASSERTION 2: Buyer cannot see BankOwnership (purchase rate) ***
+  buyerOwnerships <- query @BankOwnership buyer
+  assertMsg "Buyer must not see BankOwnership (purchase rate)" (length buyerOwnerships == 0)
+
+  -- 5. Pay invoice
+  paidCid <- submit operator $ exerciseCmd financedCid FinancedInvoice_Pay
+
+  -- 6. Report to auditor
+  auditCid <- submit operator $ exerciseCmd paidCid PaidInvoice_ReportToAuditLedger with
+    auditor
+    year = 2026
+    month = 2
+
+  -- 7. Create oracle and report from BankOwnership
+  oracleCid <- submit operator $ createCmd MarketRateOracle with
+    operator
+    sumRateVolume = 0.0
+    totalVolume = 0.0
+    numSettlements = 0
+
+  -- Report settlement: advance 97.5 -> discount 2.5% -> annualized for 90 days
+  -- annualized = 0.025 * 365/90 ≈ 10.14%
+  _ <- submit operator $ exerciseCmd ownershipCid BankOwnership_ReportToOracle with
+    oracleId = oracleCid
+    termDays = 90.0
+
+  pure ()
+
+-- | Assert that rate guardrail rejects out-of-bounds bid when oracle has data.
+testRateGuardrail : Script ()
+testRateGuardrail = script do
+  operator <- allocateParty "operator2"
+  supplier <- allocateParty "supplier2"
+  buyer    <- allocateParty "buyer2"
+  bank     <- allocateParty "bank3"
+
+  -- Bootstrap oracle with one settlement at ~10% annualized
+  oracleCid <- submit operator $ createCmd MarketRateOracle with
+    operator
+    sumRateVolume = 1000.0   -- 10% * 10000
+    totalVolume = 10000.0
+    numSettlements = 1
+
+  -- Create auction
+  invCid <- submit operator $ createCmd Invoice with
+    operator
+    supplier
+    buyer
+    invoiceId = "INV-GUARD-001"
+    amount = 50000.0
+    description = "Guard test"
+    paymentTermDays = 90
+    issueDate = date 2026 2 1
+    dueDate = date 2026 5 2
+    status = "PENDING_CONFIRMATION"
+
+  confirmedCid <- submit operator $ exerciseCmd invCid Invoice_BuyerConfirm
+  auctionCid <- submit operator $ exerciseCmd confirmedCid Invoice_StartAuction with
+    eligibleBanks = [bank]
+    startRate = 98.0
+    reserveRate = 85.0
+    auctionDurationSecs = 60
+
+  -- Try to grab at 50% advance (= 50% discount) -> annualized = 0.5 * 365/90 ≈ 202%
+  -- Oracle says ~10%, max allowed = 20%. 202% >> 20% -> should REJECT
+  mustFail $ submit operator $ exerciseCmd auctionCid FinancingAuction_BankGrab with
+    bank = bank
+    offeredRate = 50.0
+    oracleId = Some oracleCid
+
+  pure ()

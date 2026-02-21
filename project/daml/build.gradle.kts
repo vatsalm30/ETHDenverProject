@@ -32,6 +32,14 @@ tasks.register<Exec>("testDaml") {
       .setEnvironment(mapOf("DAML_SDK_VERSION" to requiredVersion))
 }
 
+tasks.register<Exec>("testInvoiceFinanceDaml") {
+    dependsOn("verifyDamlSdkVersion", "compileDaml")
+    val sdkVars = computeSdkVariables()
+    val requiredVersion = sdkVars["damlSdkVersion"] as String
+    commandLine("daml", "test", "--project-root", "invoice-finance-tests")
+      .setEnvironment(mapOf("DAML_SDK_VERSION" to requiredVersion))
+}
+
 tasks.register<com.digitalasset.transcode.codegen.java.gradle.JavaCodegenTask>("codeGen") {
     dar.from("$projectDir/licensing/.daml/dist/quickstart-licensing-0.0.1.dar")
     dar.from("$projectDir/invoice-finance/.daml/dist/quickstart-invoice-finance-0.0.1.dar")

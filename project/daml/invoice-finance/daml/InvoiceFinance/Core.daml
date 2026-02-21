@@ -27,6 +27,7 @@ module InvoiceFinance.Core where
 import DA.Date
 import DA.Time
 import DA.List (elem)
+import DA.Optional (fromSome, isSome)
 
 -- ---------------------------------------------------------------------------
 -- Helper
@@ -130,16 +131,30 @@ template FinancingAuction
 
     -- A bank grabs the invoice at the current (falling) price.
     -- Immediately creates a PRIVATE WinningBid and archives this contract.
+    -- Optional oracle: when provided, enforces rate guardrails (Blueprint 2).
     choice FinancingAuction_BankGrab : ContractId WinningBid
       with
         bank         : Party
         offeredRate  : Decimal -- ^ The rate the bank accepts (e.g. 97.6)
+        oracleId     : Optional (ContractId MarketRateOracle) -- ^ If Some, validate rate
       controller operator
       do
         require "Bidding bank must be eligible" (bank `elem` eligibleBanks)
         require "Offered rate must be ≥ reserve rate" (offeredRate >= reserveRate)
         require "Offered rate must be ≤ start rate"  (offeredRate <= startRate)
         require "Auction must be open" (status == "OPEN")
+        -- Rate guardrail (Blueprint 2): when oracle exists, bid must be within bounds
+        when (isSome oracleId) $ do
+          oracle <- fetch (fromSome oracleId)
+          when (oracle.totalVolume > 0.0) $ do
+            let currentRate = oracle.sumRateVolume / oracle.totalVolume
+            let discountPct = (100.0 - offeredRate) / 100.0
+            let termDays = 90.0 -- conservative default for guardrail
+            let bidAnnualized = discountPct * 365.0 / termDays
+            require "Bid exceeds max allowed rate (oracle guardrail)"
+              (bidAnnualized <= currentRate * 2.0)
+            require "Bid below min allowed rate (oracle guardrail)"
+              (bidAnnualized >= currentRate * 0.1)
         -- WinningBid: PRIVATE — losing banks get nothing
         create WinningBid with
           operator
@@ -293,6 +308,21 @@ template BankOwnership
     signatory operator
     observer  bank   -- *** buyer excluded — bank's margin stays confidential
 
+    -- Report to oracle (Blueprint 2). purchaseRate is advance %; discount = (100 - rate) / 100.
+    -- annualizedRate = discount * 365 / termDays.
+    nonconsuming choice BankOwnership_ReportToOracle : ContractId MarketRateOracle
+      with
+        oracleId  : ContractId MarketRateOracle
+        termDays  : Decimal
+      controller operator
+      do
+        oracle <- fetch oracleId
+        let discountPct = (100.0 - purchaseRate) / 100.0
+        let annualizedRate = discountPct * 365.0 / termDays
+        exercise oracle MarketRateOracle_IngestSettlement with
+          annualizedRate
+          faceValue
+
 -- ---------------------------------------------------------------------------
 -- SprintBoostOffer  (signatory: operator   observer: buyer, bank)
 -- ---------------------------------------------------------------------------
@@ -343,3 +373,66 @@ template PaidInvoice
     bountyPaid    : Decimal
   where
     signatory operator, supplier, buyer, bank
+
+    -- Report settlement to auditor (Blueprint 1: compliance without deal-terms leakage).
+    -- Creates AuditLedger with amount and period ONLY — no rate, no bank identity.
+    nonconsuming choice PaidInvoice_ReportToAuditLedger : ContractId AuditLedger
+      with
+        auditor : Party
+        year    : Int
+        month   : Int
+      controller operator
+      do
+        create AuditLedger with
+          platform = operator
+          auditor
+          invoiceId
+          settledAmount = amount
+          year
+          month
+
+-- ---------------------------------------------------------------------------
+-- AuditLedger  (signatory: operator   observer: auditor)
+-- ---------------------------------------------------------------------------
+-- Blueprint 1: Auditor sees aggregate settlement data only.
+-- Stripped: discount rate, bank identity, buyer identity.
+-- Auditor can compute monthly volumes for compliance without deal-level leakage.
+
+template AuditLedger
+  with
+    platform      : Party
+    auditor       : Party
+    invoiceId     : Text
+    settledAmount : Decimal
+    year          : Int
+    month         : Int
+  where
+    signatory platform
+    observer  auditor
+
+-- ---------------------------------------------------------------------------
+-- MarketRateOracle  (signatory: operator)
+-- ---------------------------------------------------------------------------
+-- Blueprint 2: Volume-weighted average rate from settlements.
+-- Operator creates with sumRateVolume=0, totalVolume=0, numSettlements=0.
+-- IngestSettlement updates: currentRate = sumRateVolume / totalVolume.
+
+template MarketRateOracle
+  with
+    operator       : Party
+    sumRateVolume  : Decimal  -- SUM(annualized_rate_i * face_value_i)
+    totalVolume    : Decimal  -- SUM(face_value_i)
+    numSettlements : Int
+  where
+    signatory operator
+
+    choice MarketRateOracle_IngestSettlement : ContractId MarketRateOracle
+      with
+        annualizedRate : Decimal
+        faceValue      : Decimal
+      controller operator
+      do
+        create this with
+          sumRateVolume  = sumRateVolume + annualizedRate * faceValue
+          totalVolume    = totalVolume + faceValue
+          numSettlements = numSettlements + 1
