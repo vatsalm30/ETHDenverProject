@@ -151,6 +151,23 @@ public class AuctionBidStore {
         }
     }
 
+    /** Returns the average rate across all bids, or empty if no bids placed. */
+    public OptionalDouble getAverageBid(String auctionContractId) {
+        AuctionBids auctionBids = auctionBidMap.get(auctionContractId);
+        if (auctionBids == null) return OptionalDouble.empty();
+        auctionBids.lock.lock();
+        try {
+            if (auctionBids.bids.isEmpty()) return OptionalDouble.empty();
+            double avg = auctionBids.bids.values().stream()
+                    .mapToDouble(Double::doubleValue)
+                    .average()
+                    .orElse(Double.NaN);
+            return Double.isNaN(avg) ? OptionalDouble.empty() : OptionalDouble.of(avg);
+        } finally {
+            auctionBids.lock.unlock();
+        }
+    }
+
     /**
      * Removes all bid state for an auction after it has been settled or cancelled.
      * Called by InvoiceFinanceApiImpl after closeAuction completes.

@@ -131,6 +131,7 @@ public class InvoiceFinanceApiImpl implements
     private final DamlRepository damlRepository;
     private final TenantPropertiesRepository tenantRepo;
     private final AuctionBidStore auctionBidStore;
+    private final EvmSettlementService evmSettlementService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -145,12 +146,14 @@ public class InvoiceFinanceApiImpl implements
 
     @Autowired
     public InvoiceFinanceApiImpl(LedgerApi ledger, AuthUtils auth, DamlRepository damlRepository,
-                                  TenantPropertiesRepository tenantRepo, AuctionBidStore auctionBidStore) {
+                                  TenantPropertiesRepository tenantRepo, AuctionBidStore auctionBidStore,
+                                  EvmSettlementService evmSettlementService) {
         this.ledger = ledger;
         this.auth = auth;
         this.damlRepository = damlRepository;
         this.tenantRepo = tenantRepo;
         this.auctionBidStore = auctionBidStore;
+        this.evmSettlementService = evmSettlementService;
     }
 
     /**
@@ -573,6 +576,11 @@ public class InvoiceFinanceApiImpl implements
                                 if (isCompany && username != null && username.equals(auctionOwner.get(cid))) {
                                     dto.setBidCount(JsonNullable.of(auctionBidStore.getBidCount(cid)));
                                 }
+                                // Average bid — market calibration signal for institutions
+                                OptionalDouble avgBid = auctionBidStore.getAverageBid(cid);
+                                if (avgBid.isPresent()) {
+                                    dto.setAverageBid(JsonNullable.of(avgBid.getAsDouble()));
+                                }
                                 // Auction end time from persistent store (survives restarts)
                                 Instant endTime = auctionEndTimes.get(cid);
                                 if (endTime != null) {
@@ -684,8 +692,10 @@ public class InvoiceFinanceApiImpl implements
         var ctx = tracingCtx(logger, "getMyBidStatus", "contractId", contractId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () -> {
             String bidKey = username != null ? username : party;
-            return CompletableFuture.completedFuture(
-                    ResponseEntity.ok(auctionBidStore.getBidStatus(contractId, bidKey)));
+            BidStatusDto statusDto = auctionBidStore.getBidStatus(contractId, bidKey);
+            OptionalDouble avg = auctionBidStore.getAverageBid(contractId);
+            if (avg.isPresent()) statusDto.setAverageBid(JsonNullable.of(avg.getAsDouble()));
+            return CompletableFuture.completedFuture(ResponseEntity.ok(statusDto));
         }));
     }
 
@@ -855,6 +865,12 @@ public class InvoiceFinanceApiImpl implements
                                 dto.setDescription(contract.payload.getDescription);
                                 dto.setSprintBoosted(contract.payload.isSprintBoostActive);
                                 dto.setBountyPaid(contract.payload.getSprintBoostBounty.doubleValue());
+                                // Canton-first: EVM fires after successful Canton commit
+                                evmSettlementService.triggerSettlement(contract.payload.getInvoiceId);
+                                evmSettlementService.getSettlement(contract.payload.getInvoiceId).ifPresent(s -> {
+                                    dto.setPaymentTxHash(JsonNullable.of(s.txHash()));
+                                    dto.setBridgeState(JsonNullable.of(PaidInvoiceDto.BridgeStateEnum.fromValue(s.bridgeState())));
+                                });
                                 return ResponseEntity.ok(dto);
                             });
                 })
@@ -965,6 +981,10 @@ public class InvoiceFinanceApiImpl implements
                                     dto.setDescription(c.payload.getDescription);
                                     dto.setSprintBoosted(c.payload.isSprintBoosted);
                                     dto.setBountyPaid(c.payload.getBountyPaid.doubleValue());
+                                    evmSettlementService.getSettlement(c.payload.getInvoiceId).ifPresent(s -> {
+                                        dto.setPaymentTxHash(JsonNullable.of(s.txHash()));
+                                        dto.setBridgeState(JsonNullable.of(PaidInvoiceDto.BridgeStateEnum.fromValue(s.bridgeState())));
+                                    });
                                     return dto;
                                 }).toList())
                 )

@@ -220,6 +220,33 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
+const EvmSettlementBadge: React.FC<{ bridgeState?: string | null; txHash?: string | null }> = ({ bridgeState, txHash }) => {
+    if (!bridgeState) return null;
+    const cfg: Record<string, { label: string; bg: string; fg: string; dot: string }> = {
+        PENDING:    { label: 'Settlement Pending', bg: '#FFF3CD', fg: '#92400e', dot: '#f59e0b' },
+        CONFIRMING: { label: 'Confirming on EVM',  bg: '#EDE9FE', fg: '#4c1d95', dot: '#7c3aed' },
+        CONFIRMED:  { label: 'EVM Confirmed',      bg: '#D1FAE5', fg: '#065f46', dot: '#10b981' },
+    };
+    const c = cfg[bridgeState] ?? { label: bridgeState, bg: '#F3F4F6', fg: '#374151', dot: '#6b7280' };
+    return (
+        <div style={{ background: c.bg, borderRadius: 8, padding: '8px 12px', marginTop: 10, fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: txHash ? 4 : 0 }}>
+                <motion.div
+                    animate={bridgeState !== 'CONFIRMED' ? { opacity: [1, 0.3, 1] } : {}}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                    style={{ width: 8, height: 8, borderRadius: '50%', background: c.dot, flexShrink: 0 }}
+                />
+                <span style={{ fontWeight: 700, color: c.fg }}>EVM Settlement: {c.label}</span>
+            </div>
+            {txHash && (
+                <div style={{ fontFamily: 'monospace', fontSize: 11, color: c.fg, opacity: 0.8 }}>
+                    Tx: {txHash.substring(0, 12)}…
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ─── AI Invoice Upload ──────────────────────────────────────────────────────
 
 interface ParsedFields { invoiceId?: string; amount?: string; description?: string; issueDate?: string; dueDate?: string; }
@@ -681,6 +708,7 @@ const AttractionDashboard: React.FC = () => {
                                             <span style={{ color: C.text }}>#{inv.invoiceId} — {inv.description}</span>
                                             <span style={{ fontWeight: 800, color: C.green }}>{fmt$(inv.amount)}</span>
                                         </div>
+                                        <EvmSettlementBadge bridgeState={(inv as any).bridgeState} txHash={(inv as any).paymentTxHash} />
                                     </GlassCard>
                                 ))}
                             </motion.div>
@@ -708,7 +736,7 @@ const AttractionDashboard: React.FC = () => {
 
 const AuctionDiscoveryCard: React.FC<{
     auction: FinancingAuctionDto;
-    bidStatus?: { hasBid: boolean; isWinning: boolean; myRate?: number | null; currentBestRate?: number | null };
+    bidStatus?: { hasBid: boolean; isWinning: boolean; myRate?: number | null; currentBestRate?: number | null; averageBid?: number | null };
     onBid: (rate: number) => Promise<any>;
 }> = ({ auction, bidStatus, onBid }) => {
     const [rate, setRate] = useState<string>(bidStatus?.myRate != null ? bidStatus.myRate.toFixed(2) : auction.reserveRate.toFixed(2));
@@ -771,6 +799,9 @@ const AuctionDiscoveryCard: React.FC<{
                 <div style={{ background: isWinning ? '#D1FAE5' : '#FFF8F0', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: isWinning ? C.green : C.gold }}>
                     Your bid: <strong>{bidStatus.myRate.toFixed(2)}%</strong>
                     {isWinning ? ' — 🏆 You have the best offer!' : bestRate != null ? ` — Best is ${bestRate.toFixed(2)}%` : ''}
+                    {bidStatus?.averageBid != null && (
+                        <span style={{ marginLeft: 8, color: C.gold }}>· Avg: {(bidStatus.averageBid as number).toFixed(2)}%</span>
+                    )}
                 </div>
             )}
 
@@ -785,7 +816,14 @@ const AuctionDiscoveryCard: React.FC<{
                         placeholder={`${auction.reserveRate.toFixed(1)} – ${auction.startRate.toFixed(1)}`}
                         style={{ width: '100%', padding: '10px 12px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
                     />
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Lower rate = better match. Bids are sealed.</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                        Lower rate = better match. Bids are sealed.
+                        {(auction.averageBid != null) && (
+                            <span style={{ marginLeft: 8, fontWeight: 700, color: C.gold }}>
+                                Market avg: {(auction.averageBid as number).toFixed(2)}%
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <CupidBtn
                     color={C.gold}
@@ -909,6 +947,7 @@ const DiscoveryDashboard: React.FC = () => {
                                             <span style={{ color: C.text }}>#{inv.invoiceId} — {inv.description}</span>
                                             <span style={{ fontWeight: 800, color: C.green }}>{fmt$(inv.amount)}</span>
                                         </div>
+                                        <EvmSettlementBadge bridgeState={(inv as any).bridgeState} txHash={(inv as any).paymentTxHash} />
                                     </GlassCard>
                                 ))}
                             </motion.div>

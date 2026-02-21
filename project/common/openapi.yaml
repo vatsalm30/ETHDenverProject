@@ -1537,6 +1537,13 @@ components:
           format: date-time
           description: When the auction expires (creation time + duration)
           nullable: true
+        averageBid:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Average of all sealed bids placed so far. Visible to all eligible institutions
+            as a market calibration signal. Null when no bids placed.
 
     GrabAuctionRequest:
       type: object
@@ -1694,6 +1701,17 @@ components:
         bountyPaid:
           type: number
           format: double
+        paymentTxHash:
+          type: string
+          nullable: true
+          description: >
+            Mock Ethereum tx hash (0x + 64 hex chars, SHA-256 derived from invoiceId+timestamp).
+        bridgeState:
+          type: string
+          nullable: true
+          enum: [PENDING, CONFIRMING, CONFIRMED]
+          description: >
+            EVM bridge settlement state. Advances PENDING→CONFIRMING (5s)→CONFIRMED (15s).
 
     ParseInvoiceRequest:
       type: object
@@ -1832,6 +1850,11 @@ components:
           format: double
           description: The best rate in the pool (visible to all eligible institutions)
           nullable: true
+        averageBid:
+          type: number
+          format: double
+          nullable: true
+          description: Market average rate across all bids. Calibration signal for bidders.
 
     CloseAuctionResult:
       type: object
