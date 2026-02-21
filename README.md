@@ -35,7 +35,7 @@ The core workflow:
 
 1. A **Supplier** creates an invoice for goods delivered to a **Buyer**.
 2. The **Buyer** confirms the invoice is legitimate.
-3. The Supplier launches a **Dutch auction** where eligible **Banks** compete to finance the invoice at the best rate.
+3. The Supplier launches a **English auction** where eligible **Banks** compete to finance the invoice at the best rate.
 4. The winning bank purchases the invoice at a discount, paying the supplier immediately.
 5. The buyer pays the full face value at maturity — the bank pockets the spread.
 6. Optionally, a **Sprint Boost** mechanism lets the buyer pay early in exchange for a bounty.
@@ -221,7 +221,7 @@ All smart contracts live in `project/daml/invoice-finance/daml/InvoiceFinance/Co
 
 **Invoice** — Created by the supplier with the operator as co-signatory. The buyer is an observer who can confirm delivery. Banks have zero visibility at this stage.
 
-**FinancingAuction** — A Dutch auction where the price starts high and falls. All eligible banks are observers and can see auction parameters, but the buyer is excluded from seeing competitive pricing. When a bank "grabs" the invoice at the current rate, the auction archives and a private `WinningBid` is created.
+**FinancingAuction** — A English auction where the price starts high and falls. All eligible banks are observers and can see auction parameters, but the buyer is excluded from seeing competitive pricing. When a bank "grabs" the invoice at the current rate, the auction archives and a private `WinningBid` is created.
 
 **WinningBid** — The most privacy-critical contract. Only the operator and the winning bank can see it. It contains the `purchaseRate` and `purchaseAmount`. Losing banks never learn who won. The buyer never sees how much the bank paid. Settlement creates two contracts: a public `FinancedInvoice` and a private `BankOwnership`.
 
