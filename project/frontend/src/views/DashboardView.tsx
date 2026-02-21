@@ -5,6 +5,7 @@ import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInvoiceFinance } from '../stores/invoiceFinanceStore';
+import type { TrustScoreData, BankTrustScoreData, BuyerTrustScoreData } from '../stores/invoiceFinanceStore';
 import { useProfile } from '../stores/profileStore';
 import { useUserStore } from '../stores/userStore';
 import { useToast } from '../stores/toastStore';
@@ -389,12 +390,26 @@ const ProfileSetupModal: React.FC<{ onSave: (r: UpdateProfileRequest) => Promise
 // ─── Invoice Create Modal ───────────────────────────────────────────────────
 
 const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateInvoiceRequest) => Promise<void> }> = ({ onClose, onCreate }) => {
+    const { trustScore, fetchBuyerScore } = useInvoiceFinance();
+    const [buyerScore, setBuyerScore] = useState<BuyerTrustScoreData | null>(null);
+    const [buyerLookupLoading, setBuyerLookupLoading] = useState(false);
+    const lookupBuyer = async (partyId: string) => {
+        if (!partyId.trim()) return;
+        setBuyerLookupLoading(true);
+        try { setBuyerScore(await fetchBuyerScore(partyId)); }
+        finally { setBuyerLookupLoading(false); }
+    };
     const today = new Date().toISOString().split('T')[0];
     const defaultDue = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
     const [form, setForm] = useState({ invoiceId: 'INV-' + Date.now().toString().slice(-6), buyerParty: 'buyer-party', amount: '', description: '', paymentTermDays: '90', issueDate: today, dueDate: defaultDue });
     const [saving, setSaving] = useState(false);
     const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
     const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: 'rgba(255,255,255,0.9)' };
+
+    const isProvisional = trustScore?.tier === 'PROVISIONAL';
+    const cap = trustScore?.invoiceValueCap ?? 5000;
+    const amountNum = parseFloat(form.amount) || 0;
+    const overCap = isProvisional && amountNum > cap;
 
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -407,21 +422,101 @@ const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateIn
                     <h3 style={{ margin: 0, fontWeight: 900, background: C.gradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>✨ Create Invoice</h3>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.muted }}>✕</button>
                 </div>
+
+                {/* Provisional supplier banner */}
+                {isProvisional && (
+                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                        style={{ background: '#DBEAFE', border: '1.5px solid #93c5fd', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}
+                    >
+                        <div style={{ fontWeight: 800, color: '#1e40af', fontSize: 13, marginBottom: 4 }}>
+                            🔄 Provisional Tier — Invoice cap: {fmt$(cap)}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#1e3a8a' }}>
+                            Complete more invoices to unlock higher limits. Proofs 2–4 are still building your history.
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                            <span style={{ background: '#D1FAE5', color: '#065f46', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P1 ✅ Legitimate</span>
+                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P2 ⏳ Pending</span>
+                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P3 ⏳ Pending</span>
+                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P4 ⏳ Pending</span>
+                        </div>
+                    </motion.div>
+                )}
+
                 <AIInvoiceUpload onParsed={f => setForm(p => ({ ...p, ...(f.invoiceId ? { invoiceId: f.invoiceId } : {}), ...(f.amount ? { amount: f.amount } : {}), ...(f.description ? { description: f.description } : {}), ...(f.issueDate ? { issueDate: f.issueDate } : {}), ...(f.dueDate ? { dueDate: f.dueDate } : {}) }))} />
-                <form onSubmit={async e => { e.preventDefault(); setSaving(true); try { await onCreate({ invoiceId: form.invoiceId, buyerParty: form.buyerParty, amount: parseFloat(form.amount), description: form.description, paymentTermDays: parseInt(form.paymentTermDays), issueDate: form.issueDate, dueDate: form.dueDate }); onClose(); } finally { setSaving(false); } }}>
+                <form onSubmit={async e => { e.preventDefault(); if (overCap) return; setSaving(true); try { await onCreate({ invoiceId: form.invoiceId, buyerParty: form.buyerParty, amount: parseFloat(form.amount), description: form.description, paymentTermDays: parseInt(form.paymentTermDays), issueDate: form.issueDate, dueDate: form.dueDate }); onClose(); } finally { setSaving(false); } }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Invoice ID *</label><input style={inputStyle} value={form.invoiceId} onChange={set('invoiceId')} required /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Amount ($) *</label><input style={inputStyle} type="number" min="1" value={form.amount} onChange={set('amount')} placeholder="100000" required /></div>
+                        <div>
+                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Amount ($) *</label>
+                            <input style={{ ...inputStyle, borderColor: overCap ? '#f87171' : C.border }} type="number" min="1" value={form.amount} onChange={set('amount')} placeholder="100000" required />
+                            {overCap && (
+                                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3, fontWeight: 700 }}>
+                                    ⚠️ Exceeds your {fmt$(cap)} provisional cap
+                                </div>
+                            )}
+                        </div>
                         <div style={{ gridColumn: '1/-1' }}><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Description *</label><input style={inputStyle} value={form.description} onChange={set('description')} placeholder="10,000 steel bolts" required /></div>
                         <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Issue Date *</label><input style={inputStyle} type="date" value={form.issueDate} onChange={set('issueDate')} required /></div>
                         <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Due Date *</label><input style={inputStyle} type="date" value={form.dueDate} onChange={set('dueDate')} required /></div>
                         <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Payment Terms (days)</label><input style={inputStyle} type="number" value={form.paymentTermDays} onChange={set('paymentTermDays')} /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Buyer Party ID</label><input style={inputStyle} value={form.buyerParty} onChange={set('buyerParty')} /></div>
+                        <div>
+                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Buyer Party ID</label>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                <input style={{ ...inputStyle, flex: 1 }} value={form.buyerParty} onChange={e => { set('buyerParty')(e); setBuyerScore(null); }} />
+                                <CupidBtn small color={C.gold} variant="outline" onClick={() => lookupBuyer(form.buyerParty)} disabled={buyerLookupLoading || !form.buyerParty.trim()}>
+                                    {buyerLookupLoading ? '⏳' : '🔍'}
+                                </CupidBtn>
+                            </div>
+                        </div>
                     </div>
+                    {/* Buyer trust lookup result */}
+                    {buyerScore && (() => {
+                        const bTierCfg = TIER_CFG[buyerScore.tier] ?? TIER_CFG.PROVISIONAL;
+                        const isHighRisk = buyerScore.tier === 'UNRATED';
+                        return (
+                            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                                style={{ background: isHighRisk ? '#FEE2E2' : bTierCfg.bg, border: `1.5px solid ${isHighRisk ? '#ef4444' : bTierCfg.color}44`, borderRadius: 12, padding: '12px 14px', marginTop: 10 }}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <span style={{ fontWeight: 800, fontSize: 13, color: isHighRisk ? '#991b1b' : bTierCfg.color }}>
+                                        {bTierCfg.icon} Buyer: {buyerScore.tier}
+                                        {buyerScore.certified && !isHighRisk && <span style={{ marginLeft: 6, fontSize: 11 }}>✔ Certified</span>}
+                                    </span>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: isHighRisk ? '#991b1b' : bTierCfg.color }}>
+                                        {buyerScore.totalScore}/{buyerScore.maxPossibleScore}
+                                    </span>
+                                </div>
+                                {isHighRisk && (
+                                    <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, marginBottom: 6 }}>
+                                        ⚠️ UNRATED buyer — banks will see HIGH RISK. Auction may attract fewer bids.
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                    {[
+                                        { label: 'P1', status: buyerScore.proof1_status },
+                                        { label: 'P2', status: buyerScore.proof2_status },
+                                        { label: 'P3', status: buyerScore.proof3_status },
+                                        { label: 'P4', status: buyerScore.proof4_status },
+                                    ].map(p => (
+                                        <span key={p.label} style={{
+                                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                                            background: p.status === 'PASS' ? '#D1FAE5' : p.status === 'FAIL' ? '#FEE2E2' : '#F3F4F6',
+                                            color: p.status === 'PASS' ? '#065f46' : p.status === 'FAIL' ? '#991b1b' : '#6b7280',
+                                            border: p.status === 'PENDING' ? '1px dashed #d1d5db' : 'none',
+                                        }}>
+                                            {p.label} {p.status === 'PASS' ? '✅' : p.status === 'FAIL' ? '❌' : '—'}
+                                        </span>
+                                    ))}
+                                </div>
+                                {buyerScore.reason && <div style={{ fontSize: 11, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{buyerScore.reason}</div>}
+                            </motion.div>
+                        );
+                    })()}
                     <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                         <CupidBtn color={C.muted} variant="outline" onClick={onClose} style={{ flex: 1 }}>Cancel</CupidBtn>
-                        <CupidBtn disabled={saving} style={{ flex: 2, background: C.gradient }}>
-                            {saving ? 'Creating…' : '💘 Make It Attractive'}
+                        <CupidBtn disabled={saving || overCap} style={{ flex: 2, background: overCap ? '#E8D0D8' : C.gradient }}>
+                            {saving ? 'Creating…' : overCap ? `Cap: ${fmt$(cap)} (Provisional)` : '💘 Make It Attractive'}
                         </CupidBtn>
                     </div>
                 </form>
@@ -537,6 +632,28 @@ const AuctionStatusCard: React.FC<{ auction: FinancingAuctionDto; onClose: () =>
             <div style={{ background: '#FFF0F5', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.primary, marginBottom: 16 }}>
                 🔒 Bids are sealed — you see only the best rate and bid count. Winner is revealed at close.
             </div>
+
+            {/* Certified bank badges — supplier sees bidders are verified */}
+            {(auction.bidCount ?? 0) > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Verified Bidders:</div>
+                    {Array.from({ length: auction.bidCount ?? 0 }, (_, i) => (
+                        <div key={i} style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '6px 12px', background: '#D1FAE5', borderRadius: 8, marginBottom: 4,
+                        }}>
+                            <span style={{ fontSize: 12 }}>🏦</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>Bank {i + 1}</span>
+                            <span style={{
+                                fontSize: 10, fontWeight: 800, color: '#065f46',
+                                background: '#A7F3D0', padding: '2px 8px', borderRadius: 999,
+                            }}>CERTIFIED ✓</span>
+                            <span style={{ fontSize: 11, color: '#6B7280', marginLeft: 'auto' }}>Bid sealed</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10 }}>
                 <CupidBtn color={C.muted} variant="outline" small onClick={onCancel}>Cancel Auction</CupidBtn>
                 <CupidBtn style={{ flex: 1, background: C.gradient }} onClick={onClose}>
@@ -547,12 +664,178 @@ const AuctionStatusCard: React.FC<{ auction: FinancingAuctionDto; onClose: () =>
     );
 };
 
+// ─── Trust Score Panel ──────────────────────────────────────────────────────
+
+const TIER_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+    PLATINUM:    { label: 'Platinum',    color: '#374151', bg: '#E5E7EB', icon: '💎' },
+    GOLD:        { label: 'Gold',        color: '#92400e', bg: '#FEF3C7', icon: '🥇' },
+    SILVER:      { label: 'Silver',      color: '#374151', bg: '#F3F4F6', icon: '🥈' },
+    PROVISIONAL: { label: 'Provisional', color: '#1e40af', bg: '#DBEAFE', icon: '🔄' },
+    UNRATED:     { label: 'Unrated',     color: '#6b7280', bg: '#F9FAFB', icon: '❓' },
+};
+
+const ProofRow: React.FC<{ label: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, status, points }) => {
+    const cfg = status === 'PASS'
+        ? { icon: '✅', color: '#065f46', bg: '#D1FAE5' }
+        : status === 'FAIL'
+        ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2' }
+        : { icon: '⏳', color: '#92400e', bg: '#FEF3C7' };
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, borderRadius: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>{cfg.icon}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points} pts</span>
+        </div>
+    );
+};
+
+// ─── Buyer Proof Row (PENDING = grey dashed, never yellow/red) ──────────────
+
+const BuyerProofRow: React.FC<{ label: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, status, points }) => {
+    const cfg = status === 'PASS'
+        ? { icon: '✅', color: '#065f46', bg: '#D1FAE5', border: 'none' as const }
+        : status === 'FAIL'
+        ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2', border: 'none' as const }
+        : { icon: '⬜', color: '#6b7280', bg: '#F3F4F6', border: '2px dashed #d1d5db' as const };
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, border: cfg.border, borderRadius: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>{cfg.icon}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</span>
+            {status === 'PENDING'
+                ? <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', fontStyle: 'italic' }}>Pending</span>
+                : <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points} pts</span>
+            }
+        </div>
+    );
+};
+
+// ─── Company Identity Card (with inline ZK Trust Score) ────────────────────
+
+const CompanyIdentityCard: React.FC<{
+    name: string;
+    sector?: string | null;
+    trustScore: TrustScoreData | null;
+    loadingTrust: boolean;
+    onRefresh: () => void;
+}> = ({ name, sector, trustScore, loadingTrust, onRefresh }) => {
+    const [showProofs, setShowProofs] = useState(false);
+    const tier = trustScore ? (TIER_CFG[trustScore.tier] ?? TIER_CFG.UNRATED) : null;
+    const pct = trustScore && trustScore.maxPossibleScore > 0
+        ? (trustScore.totalScore / trustScore.maxPossibleScore) * 100
+        : 0;
+
+    const proofs: Array<{ label: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = trustScore ? [
+        { label: 'Proof 1 — Identity & Registration',    status: trustScore.proof1_status, points: trustScore.proof1_points },
+        { label: 'Proof 2 — Financial Health',           status: trustScore.proof2_status, points: trustScore.proof2_points },
+        { label: 'Proof 3 — Payment History',            status: trustScore.proof3_status, points: trustScore.proof3_points },
+        { label: 'Proof 4 — ZK Compliance Attestation', status: trustScore.proof4_status, points: trustScore.proof4_points },
+    ] : [];
+
+    return (
+        <GlassCard style={{ marginBottom: 24, background: 'linear-gradient(135deg, rgba(255,240,245,0.97), rgba(255,245,238,0.97))', border: `1.5px solid ${C.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                {/* Left: company identity */}
+                <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: 22 }}>🏭</span>
+                        <span style={{ fontWeight: 900, fontSize: 18, color: C.text }}>{name}</span>
+                        {sector && (
+                            <span style={{ fontSize: 11, background: '#FFE8EF', color: C.primary, padding: '2px 9px', borderRadius: 999, fontWeight: 700 }}>{sector}</span>
+                        )}
+                    </div>
+                    {trustScore && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13, fontWeight: 800, padding: '3px 10px', background: tier!.bg, color: tier!.color, borderRadius: 999 }}>
+                                {tier!.icon} {tier!.label}
+                            </span>
+                            {trustScore.certified && (
+                                <span style={{ fontSize: 11, background: '#D1FAE5', color: '#065f46', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>✔ Certified</span>
+                            )}
+                            {trustScore.invoiceValueCap != null && (
+                                <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>Cap: ${trustScore.invoiceValueCap.toLocaleString()}</span>
+                            )}
+                        </div>
+                    )}
+                    {!trustScore && !loadingTrust && (
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>No trust score yet</div>
+                    )}
+                    {loadingTrust && !trustScore && (
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                            <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>🔐 Computing trust score…</motion.span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: score number + bar */}
+                {trustScore && (
+                    <div style={{ textAlign: 'right', minWidth: 120 }}>
+                        <div style={{ fontSize: 32, fontWeight: 900, color: C.primary, lineHeight: 1 }}>
+                            {trustScore.totalScore}
+                            <span style={{ fontSize: 14, color: C.muted, fontWeight: 600 }}>/{trustScore.maxPossibleScore}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>ZK Trust Score</div>
+                        <div style={{ width: 120, height: 6, borderRadius: 999, background: 'rgba(255,75,110,0.12)', overflow: 'hidden', marginLeft: 'auto' }}>
+                            <motion.div
+                                initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1, ease: 'easeOut' }}
+                                style={{ height: '100%', borderRadius: 999, background: C.gradient }}
+                            />
+                        </div>
+                        <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{pct.toFixed(0)}%</div>
+                    </div>
+                )}
+            </div>
+
+            {/* ZK proof expansion toggle */}
+            {trustScore && (
+                <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <button
+                            onClick={() => setShowProofs(v => !v)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+                        >
+                            🔐 ZK Proof Breakdown
+                            <span style={{ fontSize: 10 }}>{showProofs ? '▲' : '▼'}</span>
+                        </button>
+                        <CupidBtn small color={C.muted} variant="ghost" onClick={onRefresh} disabled={loadingTrust}>
+                            {loadingTrust ? '⏳' : '🔄 Refresh'}
+                        </CupidBtn>
+                    </div>
+                    <AnimatePresence>
+                        {showProofs && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                style={{ overflow: 'hidden', marginTop: 10 }}
+                            >
+                                {proofs.map(p => <ProofRow key={p.label} {...p} />)}
+                                {trustScore.reason && (
+                                    <div style={{ fontSize: 12, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{trustScore.reason}</div>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
+
+            {/* No score CTA */}
+            {!trustScore && !loadingTrust && (
+                <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <CupidBtn small onClick={onRefresh} style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
+                        🔐 Generate ZK Trust Score
+                    </CupidBtn>
+                </div>
+            )}
+        </GlassCard>
+    );
+};
+
 // ─── Company "Attraction" Dashboard ────────────────────────────────────────
 
 type CompanyTab = 'invoices' | 'auction' | 'financed' | 'archive';
 
 const AttractionDashboard: React.FC = () => {
-    const { invoices, auctions, financedInvoices, paidInvoices, fetchAll, createInvoice, deleteInvoice, startAuction, cancelAuction, closeAuction, payFinancedInvoice } = useInvoiceFinance();
+    const { invoices, auctions, financedInvoices, paidInvoices, fetchAll, createInvoice, deleteInvoice, startAuction, cancelAuction, closeAuction, payFinancedInvoice, trustScore, loadingTrust, fetchTrustScore, refreshTrustScore } = useInvoiceFinance();
+    const { myProfile } = useProfile();
     const [tab, setTab] = useState<CompanyTab>('invoices');
     const [showCreate, setShowCreate] = useState(false);
     const [startAuctionInvoice, setStartAuctionInvoice] = useState<InvoiceDto | null>(null);
@@ -564,6 +847,7 @@ const AttractionDashboard: React.FC = () => {
 
     useEffect(() => {
         fetchAll();
+        fetchTrustScore();
         const iv = setInterval(fetchAll, 15000);
         return () => clearInterval(iv);
     }, []);
@@ -571,14 +855,25 @@ const AttractionDashboard: React.FC = () => {
     return (
         <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 16px 40px' }}>
             {/* Section header */}
-            <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} style={{ marginBottom: 28 }}>
+            <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} style={{ marginBottom: 20 }}>
                 <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 24, background: C.gradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                     Make Your Invoices Irresistible 💘
                 </h2>
                 <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>Attract funding, get paid early, stay cashflow-positive.</p>
             </motion.div>
 
-            {/* Summary stats cascade */}
+            {/* Company identity card with ZK trust score inline */}
+            {myProfile && (
+                <CompanyIdentityCard
+                    name={myProfile.displayName ?? ''}
+                    sector={myProfile.sector ?? null}
+                    trustScore={trustScore}
+                    loadingTrust={loadingTrust}
+                    onRefresh={refreshTrustScore}
+                />
+            )}
+
+            {/* Summary stats */}
             <motion.div variants={stagger} initial="hidden" animate="visible" style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
                 <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Pending Invoices" value={invoices.length} color={C.primary} /></motion.div>
                 <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Active Auction" value={openAuctions.length} color={openAuctions.length > 0 ? C.gold : C.muted} /></motion.div>
@@ -587,7 +882,7 @@ const AttractionDashboard: React.FC = () => {
             </motion.div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 2, borderBottom: `2px solid ${C.border}`, marginBottom: 24 }}>
+            <div style={{ display: 'flex', gap: 2, borderBottom: `2px solid ${C.border}`, marginBottom: 24, flexWrap: 'wrap' }}>
                 <Tab label="📋 My Invoices" active={tab === 'invoices'} count={invoices.length} onClick={() => setTab('invoices')} accent={C.primary} />
                 <Tab label="⚡ Live Auction" active={tab === 'auction'} count={openAuctions.length} onClick={() => setTab('auction')} accent={C.primary} />
                 <Tab label="🏦 Financed" active={tab === 'financed'} count={financedInvoices.filter(i => i.paymentStatus !== 'PAID').length} onClick={() => setTab('financed')} accent={C.primary} />
@@ -609,7 +904,7 @@ const AttractionDashboard: React.FC = () => {
                 )}
             </AnimatePresence>
 
-            {/* Tab: Invoices */}
+            {/* Tab content */}
             <AnimatePresence mode="wait">
                 {tab === 'invoices' && (
                     <motion.div key="invoices" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
@@ -738,7 +1033,9 @@ const AuctionDiscoveryCard: React.FC<{
     auction: FinancingAuctionDto;
     bidStatus?: { hasBid: boolean; isWinning: boolean; myRate?: number | null; currentBestRate?: number | null; averageBid?: number | null };
     onBid: (rate: number) => Promise<any>;
-}> = ({ auction, bidStatus, onBid }) => {
+    bidBlocked?: boolean;
+    bidBlockedReason?: string;
+}> = ({ auction, bidStatus, onBid, bidBlocked, bidBlockedReason }) => {
     const [rate, setRate] = useState<string>(bidStatus?.myRate != null ? bidStatus.myRate.toFixed(2) : auction.reserveRate.toFixed(2));
     const [bidding, setBidding] = useState(false);
     const endTime = auction.auctionEndTime ? new Date(auction.auctionEndTime) : null;
@@ -749,8 +1046,23 @@ const AuctionDiscoveryCard: React.FC<{
     const isWinning = bidStatus?.isWinning ?? false;
     const bestRate = bidStatus?.currentBestRate ?? auction.currentBestRate;
 
-    // "Match score" — higher amount + longer time = better
-    const matchScore = Math.min(99, Math.round(60 + (auction.amount / 200000) * 20 + (daysLeft ?? 0) * 0.5));
+    const supplierTier: string | null = (auction as any).supplierTier ?? null;
+    const supplierCertified: boolean = (auction as any).supplierCertified ?? false;
+    const tierCfg = supplierTier ? (TIER_CFG[supplierTier] ?? TIER_CFG.PROVISIONAL) : null;
+
+    const buyerTier: string | null = (auction as any).buyerTier ?? null;
+    const buyerCertified: boolean = (auction as any).buyerCertified ?? false;
+    const buyerTierCfg = buyerTier ? (TIER_CFG[buyerTier] ?? TIER_CFG.PROVISIONAL) : null;
+    const combinedRisk: string | null = (auction as any).combinedRisk ?? null;
+    const highRiskBuyer: boolean = (auction as any).highRiskBuyer ?? false;
+    const buyerTrustScore: number | null = (auction as any).buyerTrustScore ?? null;
+    const buyerMaxScore: number | null = (auction as any).buyerMaxScore ?? null;
+    const buyerProof1Status = ((auction as any).buyerProof1Status ?? 'PENDING') as 'PASS' | 'FAIL' | 'PENDING';
+    const buyerProof2Status = ((auction as any).buyerProof2Status ?? 'PENDING') as 'PASS' | 'FAIL' | 'PENDING';
+    const buyerProof3Status = ((auction as any).buyerProof3Status ?? 'PENDING') as 'PASS' | 'FAIL' | 'PENDING';
+    const buyerProof4Status = ((auction as any).buyerProof4Status ?? 'PENDING') as 'PASS' | 'FAIL' | 'PENDING';
+    const buyerReason: string | null = (auction as any).buyerReason ?? null;
+    const [showBuyerProofs, setShowBuyerProofs] = useState(false);
 
     const handleBid = async () => {
         const r = parseFloat(rate);
@@ -760,7 +1072,7 @@ const AuctionDiscoveryCard: React.FC<{
     };
 
     return (
-        <TiltCard style={{ border: hasBid ? `2px solid ${C.gold}` : `1px solid ${C.border}` }}>
+        <TiltCard style={{ border: highRiskBuyer ? `2px solid #ef4444` : hasBid ? `2px solid ${C.gold}` : `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                 <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -781,13 +1093,44 @@ const AuctionDiscoveryCard: React.FC<{
                         {daysLeft != null && <span>⏱ {daysLeft > 0 ? `Closes ${endDateStr}` : 'Closing soon'}</span>}
                     </div>
                 </div>
-                <div style={{ textAlign: 'center', flexShrink: 0, marginLeft: 16 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: '50%', background: C.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: '#fff' }}>{matchScore}</span>
-                        <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>MATCH</span>
+                <div style={{ flexShrink: 0, marginLeft: 16 }}>
+                    {/* Supplier + Buyer tiers side by side */}
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 4 }}>
+                        {tierCfg && (
+                            <div style={{ padding: '5px 8px', borderRadius: 10, background: tierCfg.bg, border: `1px solid ${tierCfg.color}22`, textAlign: 'center' }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, marginBottom: 1 }}>SUPPLIER</div>
+                                <div style={{ fontSize: 13 }}>{tierCfg.icon}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: tierCfg.color, whiteSpace: 'nowrap' }}>{tierCfg.label.toUpperCase()}</div>
+                                {supplierCertified && <div style={{ fontSize: 8, color: tierCfg.color, opacity: 0.85, fontWeight: 700 }}>✓</div>}
+                            </div>
+                        )}
+                        {buyerTierCfg && (
+                            <div style={{ padding: '5px 8px', borderRadius: 10, background: buyerTierCfg.bg, border: highRiskBuyer ? `1px solid #ef4444` : `1px solid ${buyerTierCfg.color}22`, textAlign: 'center' }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, marginBottom: 1 }}>BUYER</div>
+                                <div style={{ fontSize: 13 }}>{buyerTierCfg.icon}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: highRiskBuyer ? '#ef4444' : buyerTierCfg.color, whiteSpace: 'nowrap' }}>{buyerTierCfg.label.toUpperCase()}</div>
+                                {highRiskBuyer && <div style={{ fontSize: 8, color: '#ef4444', fontWeight: 700 }}>⚠</div>}
+                                {buyerCertified && !highRiskBuyer && <div style={{ fontSize: 8, color: buyerTierCfg.color, opacity: 0.85, fontWeight: 700 }}>✓</div>}
+                            </div>
+                        )}
+                        {!tierCfg && !buyerTierCfg && (
+                            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: 10, color: C.muted, fontWeight: 700 }}>—</span>
+                            </div>
+                        )}
                     </div>
+                    {/* Combined risk badge */}
+                    {combinedRisk && (
+                        <div style={{
+                            fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 999, textAlign: 'center',
+                            background: combinedRisk === 'LOW RISK' ? '#D1FAE5' : combinedRisk === 'MEDIUM RISK' ? '#FEF3C7' : combinedRisk === 'ELEVATED RISK' ? '#FED7AA' : '#FEE2E2',
+                            color: combinedRisk === 'LOW RISK' ? '#065f46' : combinedRisk === 'MEDIUM RISK' ? '#92400e' : combinedRisk === 'ELEVATED RISK' ? '#7c2d12' : '#991b1b',
+                        }}>
+                            {combinedRisk}
+                        </div>
+                    )}
                     {bestRate != null && (
-                        <div style={{ marginTop: 4 }}>
+                        <div style={{ marginTop: 6, textAlign: 'right' }}>
                             <div style={{ fontSize: 16, fontWeight: 900, color: C.primary }}>{bestRate.toFixed(2)}%</div>
                             <div style={{ fontSize: 10, color: C.muted }}>best rate</div>
                         </div>
@@ -827,14 +1170,137 @@ const AuctionDiscoveryCard: React.FC<{
                 </div>
                 <CupidBtn
                     color={C.gold}
-                    disabled={bidding || !rate}
+                    disabled={bidding || !rate || bidBlocked}
                     onClick={handleBid}
-                    style={{ whiteSpace: 'nowrap', flexShrink: 0, background: bidding ? C.muted : C.instGrad }}
+                    style={{ whiteSpace: 'nowrap', flexShrink: 0, background: bidding || bidBlocked ? C.muted : C.instGrad, cursor: bidBlocked ? 'not-allowed' : 'pointer' }}
                 >
-                    {bidding ? '…' : hasBid ? '💕 Update Bid' : '💘 Connect & Bid'}
+                    {bidBlocked ? '🔒 Not Certified' : bidding ? '…' : hasBid ? '💕 Update Bid' : '💘 Connect & Bid'}
                 </CupidBtn>
             </div>
+            {bidBlocked && bidBlockedReason && (
+                <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, marginTop: 4 }}>
+                    {bidBlockedReason}
+                </div>
+            )}
+            {/* Expandable buyer ZK trust breakdown */}
+            {buyerTierCfg && (
+                <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                    <button
+                        onClick={() => setShowBuyerProofs(v => !v)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+                    >
+                        👤 Buyer ZK Trust Breakdown
+                        <span style={{ fontSize: 10 }}>{showBuyerProofs ? '▲' : '▼'}</span>
+                    </button>
+                    <AnimatePresence>
+                        {showBuyerProofs && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                style={{ overflow: 'hidden', marginTop: 8 }}
+                            >
+                                {buyerTrustScore != null && buyerMaxScore != null && (
+                                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+                                        Buyer Score: <strong style={{ color: C.text }}>{buyerTrustScore}/{buyerMaxScore}</strong>
+                                        {buyerTier && <span style={{ marginLeft: 8, fontWeight: 700, color: buyerTierCfg.color }}>{buyerTierCfg.icon} {buyerTier}</span>}
+                                    </div>
+                                )}
+                                <BuyerProofRow label="P1 — Payment History (≥90%)" status={buyerProof1Status} points={3} />
+                                <BuyerProofRow label="P2 — Invoice Confirm Rate (≥80%)" status={buyerProof2Status} points={2} />
+                                <BuyerProofRow label="P3 — Dispute Record (≤5%)" status={buyerProof3Status} points={2} />
+                                <BuyerProofRow label="P4 — Payment Timeliness (≥85%)" status={buyerProof4Status} points={3} />
+                                {buyerReason && (
+                                    <div style={{ fontSize: 11, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{buyerReason}</div>
+                                )}
+                                {highRiskBuyer && (
+                                    <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 700, marginTop: 6, padding: '6px 10px', background: '#FEE2E2', borderRadius: 8 }}>
+                                        ⚠️ UNRATED buyer — no verified payment history available.
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
         </TiltCard>
+    );
+};
+
+// ─── Bank Certification Banner ──────────────────────────────────────────────
+
+const BANK_TIER_CFG: Record<string, { label: string; color: string; bg: string; icon: string; border: string }> = {
+    CERTIFIED:      { label: 'Certified',      color: '#065f46', bg: '#D1FAE5', icon: '✓', border: '#10b981' },
+    PROBATIONARY:   { label: 'Probationary',   color: '#92400e', bg: '#FEF3C7', icon: '⏳', border: '#f59e0b' },
+    SUSPENDED:      { label: 'Suspended',      color: '#991b1b', bg: '#FEE2E2', icon: '✗', border: '#ef4444' },
+    RATE_VIOLATION: { label: 'Rate Violation',  color: '#7c2d12', bg: '#FED7AA', icon: '⚠', border: '#ea580c' },
+};
+
+const BankProofRow: React.FC<{ label: string; detail: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, detail, status, points }) => {
+    const cfg = status === 'PASS'
+        ? { icon: '✅', color: '#065f46', bg: '#D1FAE5' }
+        : status === 'FAIL'
+        ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2' }
+        : { icon: '⏳', color: '#92400e', bg: '#FEF3C7' };
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, borderRadius: 10, marginBottom: 6 }}>
+            <span style={{ fontSize: 14 }}>{cfg.icon}</span>
+            <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</div>
+                <div style={{ fontSize: 11, color: cfg.color, opacity: 0.8 }}>{detail}</div>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points}/1</span>
+        </div>
+    );
+};
+
+const BankCertBanner: React.FC<{ bs: BankTrustScoreData; loading: boolean; onRefresh: () => void }> = ({ bs, loading, onRefresh }) => {
+    const tier = BANK_TIER_CFG[bs.tier] ?? BANK_TIER_CFG.SUSPENDED;
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <GlassCard style={{ marginBottom: 20, border: `2px solid ${tier.border}`, background: `${tier.bg}cc` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 20, fontWeight: 900, color: tier.color }}>{tier.icon}</span>
+                    <span style={{ fontWeight: 900, fontSize: 15, color: tier.color }}>{tier.label.toUpperCase()}</span>
+                    <span style={{ fontSize: 13, color: tier.color, fontWeight: 700 }}>·  Score {bs.totalScore}/3</span>
+                    {bs.canBid
+                        ? <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>·  You can bid freely</span>
+                        : <span style={{ fontSize: 12, fontWeight: 700, color: '#991b1b' }}>·  Bidding disabled</span>
+                    }
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <CupidBtn small color={tier.color} variant="ghost" onClick={() => setExpanded(v => !v)}>
+                        {expanded ? '▲ Hide' : '▼ Details'}
+                    </CupidBtn>
+                    <CupidBtn small color={C.muted} variant="ghost" onClick={onRefresh} disabled={loading}>
+                        {loading ? '⏳' : '🔄'}
+                    </CupidBtn>
+                </div>
+            </div>
+
+            {!bs.canBid && bs.reason && (
+                <div style={{ marginTop: 8, fontSize: 12, color: tier.color, fontWeight: 600 }}>
+                    Reason: {bs.reason}
+                </div>
+            )}
+
+            <AnimatePresence>
+                {expanded && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                        style={{ overflow: 'hidden', marginTop: 12 }}
+                    >
+                        <BankProofRow label="X  Liquidity" detail={bs.proofX_status === 'PASS' ? 'Reserves cover ≥110% of offer' : 'Reserves insufficient'} status={bs.proofX_status} points={bs.proofX_points} />
+                        <BankProofRow label="Y  Legitimacy" detail={bs.proofY_status === 'PASS' ? 'Node active ≥30 days' : bs.proofY_status === 'PENDING' ? 'Node not yet 30 days old' : 'Node age check failed'} status={bs.proofY_status} points={bs.proofY_points} />
+                        <BankProofRow label="Z  Rate Range" detail={bs.proofZ_status === 'PASS' ? 'Rate within network benchmark' : 'Rate exceeds network average by >20%'} status={bs.proofZ_status} points={bs.proofZ_points} />
+                        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
+                            Last verified: {bs.timestamp ? new Date(bs.timestamp).toLocaleString() : '—'}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </GlassCard>
     );
 };
 
@@ -843,7 +1309,7 @@ const AuctionDiscoveryCard: React.FC<{
 type InstitutionTab = 'discover' | 'loans' | 'archive';
 
 const DiscoveryDashboard: React.FC = () => {
-    const { auctions, financedInvoices, paidInvoices, bankOwnerships, bidStatuses, fetchAll, placeBid, getMyBidStatus } = useInvoiceFinance();
+    const { auctions, financedInvoices, paidInvoices, bankOwnerships, bidStatuses, fetchAll, placeBid, getMyBidStatus, bankScore, loadingBankScore, fetchBankScore, refreshBankScore } = useInvoiceFinance();
     const [tab, setTab] = useState<InstitutionTab>('discover');
 
     const openAuctions = auctions.filter(a => a.status === 'OPEN');
@@ -851,6 +1317,7 @@ const DiscoveryDashboard: React.FC = () => {
 
     useEffect(() => {
         fetchAll();
+        fetchBankScore();
         const iv = setInterval(fetchAll, 15000);
         return () => clearInterval(iv);
     }, []);
@@ -858,6 +1325,8 @@ const DiscoveryDashboard: React.FC = () => {
     useEffect(() => {
         openAuctions.forEach(a => { if (!bidStatuses[a.contractId]) getMyBidStatus(a.contractId); });
     }, [auctions]);
+
+    const bidBlocked = bankScore ? !bankScore.canBid : false;
 
     return (
         <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 16px 40px' }}>
@@ -868,6 +1337,19 @@ const DiscoveryDashboard: React.FC = () => {
                 </h2>
                 <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>Browse live auctions, place confidential bids, earn yield at maturity.</p>
             </motion.div>
+
+            {/* Bank Certification Banner */}
+            {bankScore && (
+                <BankCertBanner bs={bankScore} loading={loadingBankScore} onRefresh={refreshBankScore} />
+            )}
+            {!bankScore && !loadingBankScore && (
+                <GlassCard style={{ marginBottom: 20, textAlign: 'center', padding: '16px 20px' }}>
+                    <CupidBtn color={C.gold} onClick={refreshBankScore} disabled={loadingBankScore}>
+                        {loadingBankScore ? '⏳ Generating...' : '🏦 Generate Bank Certification'}
+                    </CupidBtn>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Required before you can place bids</div>
+                </GlassCard>
+            )}
 
             {/* Summary stats */}
             <motion.div variants={stagger} initial="hidden" animate="visible" style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -899,6 +1381,8 @@ const DiscoveryDashboard: React.FC = () => {
                                         auction={a}
                                         bidStatus={bidStatuses[a.contractId]}
                                         onBid={rate => placeBid(a.contractId, { offeredRate: rate })}
+                                        bidBlocked={bidBlocked}
+                                        bidBlockedReason={bankScore?.reason}
                                     />
                                 ))}
                             </motion.div>

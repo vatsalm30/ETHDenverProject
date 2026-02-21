@@ -138,6 +138,21 @@ public class InvoiceFinanceApiImpl implements
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ZkServiceClient zkClient;
+
+    @Autowired
+    private SupplierTrustController trustController;
+
+    @Autowired
+    private BankTrustController bankTrustController;
+
+    @Autowired
+    private BuyerZkServiceClient buyerZkClient;
+
+    @Autowired
+    private BuyerTrustController buyerTrustController;
+
     @Value("${anthropic.api-key:}")
     private String anthropicApiKey;
 
@@ -163,6 +178,92 @@ public class InvoiceFinanceApiImpl implements
     @PostConstruct
     public void initAuctionStore() {
         try {
+            // ── Supplier trust score persistence ──────────────────────────
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS supplier_trust_scores (" +
+                "  username TEXT PRIMARY KEY, " +
+                "  tier TEXT NOT NULL DEFAULT 'PROVISIONAL', " +
+                "  certified BOOLEAN NOT NULL DEFAULT false, " +
+                "  total_score INTEGER NOT NULL DEFAULT 0, " +
+                "  max_score INTEGER NOT NULL DEFAULT 7, " +
+                "  pending_count INTEGER NOT NULL DEFAULT 3, " +
+                "  reason TEXT, " +
+                "  invoice_value_cap INTEGER, " +
+                "  proof1_status TEXT DEFAULT 'PASS', " +
+                "  proof2_status TEXT DEFAULT 'PENDING', " +
+                "  proof3_status TEXT DEFAULT 'PENDING', " +
+                "  proof4_status TEXT DEFAULT 'PENDING', " +
+                "  proof1_points INTEGER DEFAULT 0, " +
+                "  proof2_points INTEGER DEFAULT 0, " +
+                "  proof3_points INTEGER DEFAULT 0, " +
+                "  proof4_points INTEGER DEFAULT 0, " +
+                "  on_time_paid INTEGER DEFAULT 0, " +
+                "  total_invoices INTEGER DEFAULT 0, " +
+                "  invoices_6mo INTEGER DEFAULT 0, " +
+                "  total_disputes INTEGER DEFAULT 0, " +
+                "  last_calculated BIGINT DEFAULT 0)");
+
+            // ── Bank trust score persistence ─────────────────────────────
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS bank_trust_scores (" +
+                "  username TEXT PRIMARY KEY, " +
+                "  tier TEXT NOT NULL DEFAULT 'SUSPENDED', " +
+                "  certified BOOLEAN NOT NULL DEFAULT false, " +
+                "  can_bid BOOLEAN NOT NULL DEFAULT false, " +
+                "  total_score INTEGER NOT NULL DEFAULT 0, " +
+                "  reason TEXT, " +
+                "  proofx_status TEXT DEFAULT 'FAIL', " +
+                "  proofy_status TEXT DEFAULT 'PENDING', " +
+                "  proofz_status TEXT DEFAULT 'FAIL', " +
+                "  proofx_points INTEGER DEFAULT 0, " +
+                "  proofy_points INTEGER DEFAULT 0, " +
+                "  proofz_points INTEGER DEFAULT 0, " +
+                "  reserve_balance DOUBLE PRECISION DEFAULT 1000000, " +
+                "  financing_amount DOUBLE PRECISION DEFAULT 100000, " +
+                "  registration_ts BIGINT, " +
+                "  last_offered_rate INTEGER DEFAULT 0, " +
+                "  last_calculated BIGINT DEFAULT 0)");
+
+            // ── Buyer trust score persistence ──────────────────────────
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS buyer_trust_scores (" +
+                "  buyer_id TEXT PRIMARY KEY, " +
+                "  tier TEXT NOT NULL DEFAULT 'PROVISIONAL', " +
+                "  certified BOOLEAN NOT NULL DEFAULT false, " +
+                "  total_score INTEGER NOT NULL DEFAULT 0, " +
+                "  max_score INTEGER NOT NULL DEFAULT 10, " +
+                "  pending_count INTEGER NOT NULL DEFAULT 4, " +
+                "  reason TEXT, " +
+                "  proof1_status TEXT DEFAULT 'PENDING', " +
+                "  proof2_status TEXT DEFAULT 'PENDING', " +
+                "  proof3_status TEXT DEFAULT 'PENDING', " +
+                "  proof4_status TEXT DEFAULT 'PENDING', " +
+                "  proof1_points INTEGER DEFAULT 0, " +
+                "  proof2_points INTEGER DEFAULT 0, " +
+                "  proof3_points INTEGER DEFAULT 0, " +
+                "  proof4_points INTEGER DEFAULT 0, " +
+                "  total_invoices_paid INTEGER DEFAULT 0, " +
+                "  total_invoices_obligation INTEGER DEFAULT 0, " +
+                "  confirmed_count INTEGER DEFAULT 0, " +
+                "  total_received INTEGER DEFAULT 0, " +
+                "  total_disputes INTEGER DEFAULT 0, " +
+                "  on_time_payments INTEGER DEFAULT 0, " +
+                "  total_payments INTEGER DEFAULT 0, " +
+                "  last_calculated BIGINT DEFAULT 0)");
+            jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS buyer_invoices (" +
+                "  id SERIAL PRIMARY KEY, " +
+                "  buyer_id TEXT NOT NULL, " +
+                "  invoice_id TEXT NOT NULL, " +
+                "  status TEXT NOT NULL DEFAULT 'PENDING', " +
+                "  confirmed_on_time BOOLEAN DEFAULT true, " +
+                "  paid_on_time BOOLEAN DEFAULT false, " +
+                "  disputes INTEGER DEFAULT 0, " +
+                "  created_epoch BIGINT DEFAULT 0, " +
+                "  paid_epoch BIGINT DEFAULT 0)");
+            jdbcTemplate.execute(
+                "CREATE INDEX IF NOT EXISTS idx_buyer_invoices_buyer_id ON buyer_invoices(buyer_id)");
+
             jdbcTemplate.execute(
                 "CREATE TABLE IF NOT EXISTS auction_end_times (" +
                 "  contract_id TEXT PRIMARY KEY, end_epoch_sec BIGINT NOT NULL)");
@@ -385,6 +486,8 @@ public class InvoiceFinanceApiImpl implements
             // Record who created this invoice for multi-tenant isolation
             if (username != null) invoiceOwner.put(pseudoId, username);
             logger.info("createInvoice stored in-memory: pseudoId={} invoiceId={} owner={}", pseudoId, req.getInvoiceId(), username);
+            // Increment 6-month invoice counter for trust scoring
+            if (username != null) incrementInvoices6mo(username);
             return CompletableFuture.completedFuture(
                     ResponseEntity.status(HttpStatus.CREATED).body(dto));
         }));
@@ -417,6 +520,14 @@ public class InvoiceFinanceApiImpl implements
             if (dto == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found: " + contractId);
             }
+
+            // ── Buyer ZK trust score (non-blocking — buyer is NEVER blocked) ─────
+            // Record this invoice in the buyer's obligation history and trigger
+            // an async ZK score refresh. The response returns immediately regardless.
+            String buyerId = dto.getBuyer() != null ? dto.getBuyer() : "unknown-buyer";
+            recordBuyerInvoiceReceived(buyerId, dto.getInvoiceId());
+            buyerTrustController.triggerScoreRefresh(buyerId);
+
             return CompletableFuture.completedFuture(ResponseEntity.ok(dto));
         }));
     }
@@ -485,8 +596,36 @@ public class InvoiceFinanceApiImpl implements
                     "OPEN"
             );
 
+            // ── ZK Trust Score enforcement ──────────────────────────────────
+            // Pull supplier's historical stats from DB (0-values for new suppliers).
+            int[] stats = trustController.getStats(username != null ? username : "unknown");
+            String invoiceHash = String.valueOf(Math.abs(invoiceDto.getInvoiceId().hashCode()) + 100_000L);
+
             Instant createdAt = Instant.now();
-            return ledger.createAndGetId(auction, commandId)
+            return zkClient.getSupplierTrustScore(
+                    username != null ? username : party,
+                    invoiceHash,
+                    stats[0], // onTimePaidCount
+                    stats[1], // totalInvoiceCount
+                    stats[2], // invoiceCountLast6Months
+                    stats[3], // totalDisputes
+                    "1234567890" // canonical registryRoot
+            ).thenComposeAsync(trustScore -> {
+                // Persist the fresh score so the dashboard reflects it immediately
+                trustController.persistScore(username != null ? username : party, trustScore, stats);
+
+                // UNRATED → blocked entirely
+                if ("UNRATED".equals(trustScore.tier)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Supplier trust score too low to create auction");
+                }
+                // PROVISIONAL → allowed but capped at $5,000
+                if ("PROVISIONAL".equals(trustScore.tier) && invoiceDto.getAmount() > 5000) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Provisional suppliers are limited to $5,000 per invoice");
+                }
+
+                return ledger.createAndGetId(auction, commandId)
                     .thenApply(auctionCid -> {
                         String auctionCidStr = auctionCid.getContractId;
                         // Remove from pending map
@@ -520,8 +659,23 @@ public class InvoiceFinanceApiImpl implements
                         dto.setStatus(FinancingAuctionDto.StatusEnum.OPEN);
                         dto.setAuctionEndTime(JsonNullable.of(java.time.OffsetDateTime.ofInstant(
                                 endTime, java.time.ZoneOffset.UTC)));
+
+                        // ── Trust score fields on the auction DTO ───────────
+                        dto.setSupplierTier(JsonNullable.of(trustScore.tier));
+                        dto.setSupplierCertified(JsonNullable.of(trustScore.certified));
+                        dto.setSupplierTrustScore(JsonNullable.of(trustScore.totalScore));
+                        dto.setSupplierMaxScore(JsonNullable.of(trustScore.maxPossibleScore));
+                        dto.setSupplierPendingCount(JsonNullable.of(trustScore.pendingCount));
+                        dto.setSupplierReason(JsonNullable.of(trustScore.reason));
+                        dto.setInvoiceValueCap(JsonNullable.of(trustScore.invoiceValueCap));
+                        dto.setProof1Status(JsonNullable.of(trustScore.proof1Status));
+                        dto.setProof2Status(JsonNullable.of(trustScore.proof2Status));
+                        dto.setProof3Status(JsonNullable.of(trustScore.proof3Status));
+                        dto.setProof4Status(JsonNullable.of(trustScore.proof4Status));
+
                         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
                     });
+            }); // end zkClient.thenComposeAsync
         }));
     }
 
@@ -587,6 +741,64 @@ public class InvoiceFinanceApiImpl implements
                                     dto.setAuctionEndTime(JsonNullable.of(java.time.OffsetDateTime.ofInstant(
                                             endTime, java.time.ZoneOffset.UTC)));
                                 }
+                                // Attach cached supplier ZK trust tier for bank-side display
+                                String ownerName = auctionOwner.get(cid);
+                                if (ownerName != null) {
+                                    try {
+                                        var trustRows = jdbcTemplate.queryForList(
+                                            "SELECT tier, certified FROM supplier_trust_scores WHERE username = ?",
+                                            ownerName);
+                                        if (!trustRows.isEmpty()) {
+                                            var tr = trustRows.get(0);
+                                            dto.setSupplierTier(JsonNullable.of(
+                                                tr.getOrDefault("tier", "PROVISIONAL").toString()));
+                                            dto.setSupplierCertified(JsonNullable.of(
+                                                Boolean.TRUE.equals(tr.get("certified"))));
+                                        } else {
+                                            dto.setSupplierTier(JsonNullable.of("PROVISIONAL"));
+                                            dto.setSupplierCertified(JsonNullable.of(false));
+                                        }
+                                    } catch (Exception e) {
+                                        logger.warn("listAuctions: supplier trust lookup failed for {}: {}", ownerName, e.getMessage());
+                                    }
+                                }
+
+                                // Attach cached buyer ZK trust data
+                                String buyerPartyId = c.payload.getBuyer.getParty;
+                                String resolvedSupplierTier = dto.getSupplierTier().isPresent()
+                                        ? dto.getSupplierTier().get() : "PROVISIONAL";
+                                try {
+                                    var buyerRows = jdbcTemplate.queryForList(
+                                        "SELECT tier, certified, total_score, max_score, pending_count, reason, " +
+                                        "proof1_status, proof2_status, proof3_status, proof4_status " +
+                                        "FROM buyer_trust_scores WHERE buyer_id = ?",
+                                        buyerPartyId);
+                                    if (!buyerRows.isEmpty()) {
+                                        var br = buyerRows.get(0);
+                                        String bTier = br.getOrDefault("tier", "PROVISIONAL").toString();
+                                        dto.setBuyerTier(JsonNullable.of(bTier));
+                                        dto.setBuyerCertified(JsonNullable.of(Boolean.TRUE.equals(br.get("certified"))));
+                                        dto.setBuyerTrustScore(JsonNullable.of(toIntVal(br.get("total_score"))));
+                                        dto.setBuyerMaxScore(JsonNullable.of(toIntVal(br.get("max_score"))));
+                                        dto.setBuyerPendingCount(JsonNullable.of(toIntVal(br.get("pending_count"))));
+                                        dto.setBuyerReason(JsonNullable.of(br.getOrDefault("reason", "").toString()));
+                                        dto.setBuyerProof1Status(JsonNullable.of(br.getOrDefault("proof1_status", "PENDING").toString()));
+                                        dto.setBuyerProof2Status(JsonNullable.of(br.getOrDefault("proof2_status", "PENDING").toString()));
+                                        dto.setBuyerProof3Status(JsonNullable.of(br.getOrDefault("proof3_status", "PENDING").toString()));
+                                        dto.setBuyerProof4Status(JsonNullable.of(br.getOrDefault("proof4_status", "PENDING").toString()));
+                                        dto.setHighRiskBuyer(JsonNullable.of("UNRATED".equals(bTier)));
+                                        dto.setCombinedRisk(JsonNullable.of(computeCombinedRisk(resolvedSupplierTier, bTier)));
+                                    } else {
+                                        dto.setBuyerTier(JsonNullable.of("PROVISIONAL"));
+                                        dto.setBuyerCertified(JsonNullable.of(false));
+                                        dto.setBuyerPendingCount(JsonNullable.of(4));
+                                        dto.setHighRiskBuyer(JsonNullable.of(false));
+                                        dto.setCombinedRisk(JsonNullable.of(computeCombinedRisk(resolvedSupplierTier, "PROVISIONAL")));
+                                    }
+                                } catch (Exception e) {
+                                    logger.warn("listAuctions: buyer trust lookup failed for {}: {}", buyerPartyId, e.getMessage());
+                                }
+
                                 return dto;
                             }).toList());
                 })
@@ -661,11 +873,10 @@ public class InvoiceFinanceApiImpl implements
     @WithSpan
     public CompletableFuture<ResponseEntity<PlaceBidResult>> placeBid(
             String contractId, String commandId, PlaceBidRequest placeBidRequest) {
-        // Use username as the bid key so each institution user has isolated bid state
         String username = currentUsername();
         var ctx = tracingCtx(logger, "placeBid", "contractId", contractId);
         return auth.asAuthenticatedParty(party -> traceServiceCallAsync(ctx, () ->
-                damlRepository.findAuctionById(contractId).thenApplyAsync(opt -> {
+                damlRepository.findAuctionById(contractId).thenComposeAsync(opt -> {
                     var contract = ensurePresent(opt, "Auction not found: %s", contractId);
                     if (!"OPEN".equals(contract.payload.getStatus)) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is not OPEN");
@@ -676,10 +887,23 @@ public class InvoiceFinanceApiImpl implements
                                 "offeredRate must be between 0 and 100");
                     }
                     String bidKey = username != null ? username : party;
-                    PlaceBidResult result = auctionBidStore.placeBid(contractId, bidKey, rate);
-                    logger.info("placeBid: auctionId={} user={} rate={} winning={}",
-                            contractId, bidKey, rate, result.getIsCurrentBestBid());
-                    return ResponseEntity.ok(result);
+                    double financingAmount = contract.payload.getAmount.doubleValue() * rate / 100.0;
+
+                    int rateBasisPoints = (int) Math.round(rate * 100);
+                    return bankTrustController.verifyBankForBid(bidKey, financingAmount, rateBasisPoints)
+                            .thenApply(bankScore -> {
+                                if (!bankScore.canBid) {
+                                    logger.warn("placeBid BLOCKED: bank={} tier={} reason={}",
+                                            bidKey, bankScore.tier, bankScore.reason);
+                                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                            bankScore.reason != null ? bankScore.reason
+                                                    : "Bank is not certified to bid");
+                                }
+                                PlaceBidResult result = auctionBidStore.placeBid(contractId, bidKey, rate);
+                                logger.info("placeBid: auctionId={} user={} rate={} winning={} bankTier={}",
+                                        contractId, bidKey, rate, result.getIsCurrentBestBid(), bankScore.tier);
+                                return ResponseEntity.ok(result);
+                            });
                 })
         ));
     }
@@ -728,14 +952,42 @@ public class InvoiceFinanceApiImpl implements
                             });
                 }
 
+                // Double-verify winning bank certification before settlement.
+                // Walk the bid list until we find a certified bank.
                 AuctionBidStore.WinnerInfo winner = winnerOpt.get();
+                double auctionAmount = auctionContract.payload.getAmount.doubleValue();
+                try {
+                    double financingAmt = auctionAmount * winner.rate() / 100.0;
+                    int winnerRateBps = (int) Math.round(winner.rate() * 100);
+                    var bankScore = bankTrustController.verifyBankForBid(winner.username(), financingAmt, winnerRateBps).join();
+                    if (!bankScore.canBid) {
+                        logger.warn("closeAuction: winning bank {} no longer certified (tier={}), selecting next bidder",
+                                winner.username(), bankScore.tier);
+                        var nextWinner = auctionBidStore.getNextCertifiedWinner(contractId, winner.username());
+                        if (nextWinner.isEmpty()) {
+                            logger.info("closeAuction: no certified bidders remain — archiving auction {}", contractId);
+                            return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, commandId)
+                                    .thenApply(v -> {
+                                        cleanupAuction(contractId);
+                                        var result = new CloseAuctionResult();
+                                        result.setNoWinner(true);
+                                        return ResponseEntity.ok(result);
+                                    });
+                        }
+                        winner = nextWinner.get();
+                    }
+                } catch (Exception e) {
+                    logger.warn("closeAuction: bank re-verification failed for {} — proceeding with caution: {}",
+                            winner.username(), e.getMessage());
+                }
+
                 logger.info("closeAuction: settling auction {} with winner={} rate={}",
                         contractId, winner.username(), winner.rate());
 
-                double purchaseAmount = auctionContract.payload.getAmount.doubleValue()
-                        * winner.rate() / 100.0;
+                double purchaseAmount = auctionAmount * winner.rate() / 100.0;
 
                 String archiveCommandId = commandId + "-archive";
+                AuctionBidStore.WinnerInfo finalWinner = winner;
                 return ledger.archive(auctionContract.contractId, FinancingAuction.TEMPLATE_ID, archiveCommandId)
                         .thenComposeAsync(v -> {
                             // WinningBid_Settle has archive-self bug in deployed @b2fe96ff —
@@ -756,7 +1008,7 @@ public class InvoiceFinanceApiImpl implements
                             var bankOwnership = new BankOwnership(
                                     op, op,
                                     auctionContract.payload.getInvoiceId,
-                                    BigDecimal.valueOf(winner.rate()),
+                                    BigDecimal.valueOf(finalWinner.rate()),
                                     BigDecimal.valueOf(purchaseAmount),
                                     auctionContract.payload.getAmount
                             );
@@ -773,20 +1025,19 @@ public class InvoiceFinanceApiImpl implements
                             String boCidStr = cids[1];
                             cleanupAuction(contractId);
 
-                            // Store ownership for per-user filtering
                             financedInvoiceCompany.put(fiCidStr, username);
-                            financedInvoiceWinner.put(fiCidStr, winner.username());
-                            bankOwnershipWinner.put(boCidStr, winner.username());
-                            persistFiOwner(fiCidStr, username, winner.username());
-                            persistBoWinner(boCidStr, winner.username());
+                            financedInvoiceWinner.put(fiCidStr, finalWinner.username());
+                            bankOwnershipWinner.put(boCidStr, finalWinner.username());
+                            persistFiOwner(fiCidStr, username, finalWinner.username());
+                            persistBoWinner(boCidStr, finalWinner.username());
 
-                            String displayName = ProfileApiImpl.getDisplayNameByUsername(winner.username());
+                            String displayName = ProfileApiImpl.getDisplayNameByUsername(finalWinner.username());
 
                             var result = new CloseAuctionResult();
                             result.setNoWinner(false);
-                            result.setWinningInstitutionPartyId(JsonNullable.of(winner.username()));
+                            result.setWinningInstitutionPartyId(JsonNullable.of(finalWinner.username()));
                             result.setWinningInstitutionDisplayName(JsonNullable.of(displayName));
-                            result.setWinningRate(JsonNullable.of(winner.rate()));
+                            result.setWinningRate(JsonNullable.of(finalWinner.rate()));
                             result.setFinancedInvoiceContractId(JsonNullable.of(fiCidStr));
                             result.setPurchaseAmount(JsonNullable.of(purchaseAmount));
                             return ResponseEntity.ok(result);
@@ -865,6 +1116,12 @@ public class InvoiceFinanceApiImpl implements
                                 dto.setDescription(contract.payload.getDescription);
                                 dto.setSprintBoosted(contract.payload.isSprintBoostActive);
                                 dto.setBountyPaid(contract.payload.getSprintBoostBounty.doubleValue());
+                                // Increment on-time paid count for supplier trust scoring
+                                if (username != null) incrementPaidCount(username);
+                                // Update buyer invoice stats and recalculate buyer ZK score
+                                String buyerParty = contract.payload.getBuyer.getParty;
+                                recordBuyerPaymentMade(buyerParty, contract.payload.getInvoiceId, true);
+                                buyerTrustController.triggerScoreRefresh(buyerParty);
                                 // Canton-first: EVM fires after successful Canton commit
                                 evmSettlementService.triggerSettlement(contract.payload.getInvoiceId);
                                 evmSettlementService.getSettlement(contract.payload.getInvoiceId).ifPresent(s -> {
@@ -1166,6 +1423,34 @@ public class InvoiceFinanceApiImpl implements
         }
     }
 
+    // ── Trust score stat helpers ───────────────────────────────────────────────
+
+    /** Increments the 6-month invoice counter when a new invoice is created. */
+    private void incrementInvoices6mo(String username) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO supplier_trust_scores(username, invoices_6mo) VALUES(?,1) " +
+                "ON CONFLICT(username) DO UPDATE SET invoices_6mo = supplier_trust_scores.invoices_6mo + 1",
+                username);
+        } catch (Exception e) {
+            logger.warn("incrementInvoices6mo: {}", e.getMessage());
+        }
+    }
+
+    /** Increments total_invoices and on_time_paid when a payment is received. */
+    private void incrementPaidCount(String username) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO supplier_trust_scores(username, total_invoices, on_time_paid) VALUES(?,1,1) " +
+                "ON CONFLICT(username) DO UPDATE SET " +
+                "  total_invoices = supplier_trust_scores.total_invoices + 1, " +
+                "  on_time_paid   = supplier_trust_scores.on_time_paid + 1",
+                username);
+        } catch (Exception e) {
+            logger.warn("incrementPaidCount: {}", e.getMessage());
+        }
+    }
+
     /**
      * Resolves the eligible bank party IDs when none are specified by the company.
      */
@@ -1184,6 +1469,70 @@ public class InvoiceFinanceApiImpl implements
             return tenantParties;
         }
         return List.of(operatorParty);
+    }
+
+    // ── Buyer invoice tracking helpers ─────────────────────────────────────────
+
+    /** Records a new invoice obligation for the buyer (when buyer confirms). */
+    private void recordBuyerInvoiceReceived(String buyerId, String invoiceId) {
+        try {
+            jdbcTemplate.update(
+                "INSERT INTO buyer_invoices(buyer_id, invoice_id, status, confirmed_on_time, created_epoch) " +
+                "VALUES(?,?,'PENDING',true,?) " +
+                "ON CONFLICT DO NOTHING",
+                buyerId, invoiceId, System.currentTimeMillis() / 1000L);
+            // Also upsert to increment total_received in trust scores
+            jdbcTemplate.update(
+                "INSERT INTO buyer_trust_scores(buyer_id, total_received, total_invoices_obligation) VALUES(?,1,1) " +
+                "ON CONFLICT(buyer_id) DO UPDATE SET " +
+                "  total_received = buyer_trust_scores.total_received + 1, " +
+                "  total_invoices_obligation = buyer_trust_scores.total_invoices_obligation + 1",
+                buyerId);
+        } catch (Exception e) {
+            logger.warn("recordBuyerInvoiceReceived: {}", e.getMessage());
+        }
+    }
+
+    /** Records a buyer payment (when buyer pays a FinancedInvoice). */
+    private void recordBuyerPaymentMade(String buyerId, String invoiceId, boolean onTime) {
+        try {
+            long now = System.currentTimeMillis() / 1000L;
+            jdbcTemplate.update(
+                "UPDATE buyer_invoices SET status='PAID', paid_on_time=?, paid_epoch=? " +
+                "WHERE buyer_id=? AND invoice_id=?",
+                onTime, now, buyerId, invoiceId);
+            // Upsert stats increment
+            jdbcTemplate.update(
+                "INSERT INTO buyer_trust_scores(buyer_id, total_invoices_paid, total_payments, on_time_payments) VALUES(?,1,1,?) " +
+                "ON CONFLICT(buyer_id) DO UPDATE SET " +
+                "  total_invoices_paid = buyer_trust_scores.total_invoices_paid + 1, " +
+                "  total_payments = buyer_trust_scores.total_payments + 1, " +
+                "  on_time_payments = buyer_trust_scores.on_time_payments + ?",
+                buyerId, onTime ? 1 : 0, onTime ? 1 : 0);
+        } catch (Exception e) {
+            logger.warn("recordBuyerPaymentMade: {}", e.getMessage());
+        }
+    }
+
+    /** Computes a combined risk label from supplier and buyer tiers. */
+    private static String computeCombinedRisk(String supplierTier, String buyerTier) {
+        if (supplierTier == null) supplierTier = "PROVISIONAL";
+        if (buyerTier == null) buyerTier = "PROVISIONAL";
+        if ("UNRATED".equals(supplierTier) || "UNRATED".equals(buyerTier)) return "HIGH RISK";
+        if ("PROVISIONAL".equals(supplierTier) && "PROVISIONAL".equals(buyerTier)) return "HIGH RISK";
+        if ("PROVISIONAL".equals(supplierTier) || "PROVISIONAL".equals(buyerTier)) return "ELEVATED RISK";
+        boolean sBothHighTier = "PLATINUM".equals(supplierTier) || "GOLD".equals(supplierTier);
+        boolean bBothHighTier = "PLATINUM".equals(buyerTier) || "GOLD".equals(buyerTier);
+        if (sBothHighTier && bBothHighTier) return "LOW RISK";
+        if (("GOLD".equals(supplierTier) && "SILVER".equals(buyerTier)) ||
+            ("SILVER".equals(supplierTier) && "GOLD".equals(buyerTier))) return "MEDIUM RISK";
+        if ("SILVER".equals(supplierTier) || "SILVER".equals(buyerTier)) return "MEDIUM RISK";
+        return "MEDIUM RISK";
+    }
+
+    private static int toIntVal(Object v) {
+        if (v instanceof Number n) return n.intValue();
+        return 0;
     }
 
     private FinancedInvoiceDto toFinancedInvoiceDto(com.digitalasset.quickstart.pqs.Contract<FinancedInvoice> c) {

@@ -9,6 +9,7 @@ import HomeView from './views/HomeView';
 import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import SelectRoleView from './views/SelectRoleView';
+import AdminNetworkView from './views/AdminNetworkView';
 import { UserProvider } from './stores/userStore';
 import Header from './components/Header';
 import ToastNotification from './components/ToastNotification';
@@ -32,6 +33,7 @@ const App: React.FC = () => {
                     <Route path="/select-role" element={<SelectRoleView />} />
                     <Route path="/login" element={<LoginView />} />
                     <Route path="/dashboard" element={<DashboardView />} />
+                    <Route path="/admin/network" element={<AdminNetworkView />} />
                 </Routes>
             </main>
             <ToastNotification />

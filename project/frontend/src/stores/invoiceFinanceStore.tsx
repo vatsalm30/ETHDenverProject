@@ -23,6 +23,67 @@ import type {
     ParsedInvoiceDto,
 } from '../openapi.d.ts';
 
+// ── Bank trust score types (returned by GET /trust-score/bank/me) ────────────
+export interface BankTrustScoreData {
+    bank: string;
+    tier: 'CERTIFIED' | 'PROBATIONARY' | 'SUSPENDED' | 'RATE_VIOLATION';
+    certified: boolean;
+    canBid: boolean;
+    totalScore: number;
+    reason: string;
+    proofX_status: 'PASS' | 'FAIL';
+    proofY_status: 'PASS' | 'FAIL' | 'PENDING';
+    proofZ_status: 'PASS' | 'FAIL';
+    proofX_points: number;
+    proofY_points: number;
+    proofZ_points: number;
+    allProofsValid: boolean;
+    timestamp: string;
+}
+
+// ── Trust score types (returned by GET /trust-score/supplier/me) ─────────────
+export interface TrustScoreData {
+    supplier: string;
+    tier: 'PLATINUM' | 'GOLD' | 'SILVER' | 'UNRATED' | 'PROVISIONAL';
+    certified: boolean;
+    totalScore: number;
+    maxPossibleScore: number;
+    pendingCount: number;
+    reason: string;
+    invoiceValueCap: number | null;
+    proof1_status: 'PASS' | 'FAIL';
+    proof2_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof3_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof4_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof1_points: number;
+    proof2_points: number;
+    proof3_points: number;
+    proof4_points: number;
+    allProofsValid: boolean;
+    timestamp: string;
+}
+
+// ── Buyer trust score types ───────────────────────────────────────────────────
+export interface BuyerTrustScoreData {
+    buyer: string;
+    tier: 'PLATINUM' | 'GOLD' | 'SILVER' | 'UNRATED' | 'PROVISIONAL';
+    certified: boolean;
+    totalScore: number;
+    maxPossibleScore: number;
+    pendingCount: number;
+    reason: string;
+    proof1_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof2_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof3_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof4_status: 'PASS' | 'FAIL' | 'PENDING';
+    proof1_points: number;
+    proof2_points: number;
+    proof3_points: number;
+    proof4_points: number;
+    allProofsValid: boolean;
+    timestamp: string;
+}
+
 interface InvoiceFinanceState {
     invoices: InvoiceDto[];
     auctions: FinancingAuctionDto[];
@@ -30,6 +91,11 @@ interface InvoiceFinanceState {
     bankOwnerships: BankOwnershipDto[];
     paidInvoices: PaidInvoiceDto[];
     bidStatuses: Record<string, BidStatusDto>;
+    trustScore: TrustScoreData | null;
+    loadingTrust: boolean;
+    bankScore: BankTrustScoreData | null;
+    loadingBankScore: boolean;
+    buyerScoreCache: Record<string, BuyerTrustScoreData>;
 }
 
 interface InvoiceFinanceContextType extends InvoiceFinanceState {
@@ -43,6 +109,12 @@ interface InvoiceFinanceContextType extends InvoiceFinanceState {
     placeBid: (contractId: string, req: PlaceBidRequest) => Promise<PlaceBidResult | null>;
     getMyBidStatus: (contractId: string) => Promise<void>;
     payFinancedInvoice: (contractId: string) => Promise<void>;
+    fetchTrustScore: () => Promise<void>;
+    refreshTrustScore: () => Promise<void>;
+    fetchBankScore: () => Promise<void>;
+    refreshBankScore: () => Promise<void>;
+    fetchBuyerScore: (buyerId: string) => Promise<BuyerTrustScoreData | null>;
+    refreshBuyerScore: (buyerId: string) => Promise<BuyerTrustScoreData | null>;
     parseInvoice: (req: ParseInvoiceRequest) => Promise<ParsedInvoiceDto | null>;
 }
 
@@ -55,7 +127,88 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
     const [bankOwnerships, setBankOwnerships] = useState<BankOwnershipDto[]>([]);
     const [paidInvoices, setPaidInvoices] = useState<PaidInvoiceDto[]>([]);
     const [bidStatuses, setBidStatuses] = useState<Record<string, BidStatusDto>>({});
+    const [trustScore, setTrustScore] = useState<TrustScoreData | null>(null);
+    const [loadingTrust, setLoadingTrust] = useState(false);
+    const [bankScore, setBankScore] = useState<BankTrustScoreData | null>(null);
+    const [loadingBankScore, setLoadingBankScore] = useState(false);
+    const [buyerScoreCache, setBuyerScoreCache] = useState<Record<string, BuyerTrustScoreData>>({});
     const toast = useToast();
+
+    const fetchTrustScore = useCallback(async () => {
+        setLoadingTrust(true);
+        try {
+            const resp = await fetch('/api/trust-score/supplier/me');
+            if (resp.ok) setTrustScore(await resp.json());
+        } catch (e) {
+            console.warn('fetchTrustScore failed', e);
+        } finally {
+            setLoadingTrust(false);
+        }
+    }, []);
+
+    const refreshTrustScore = useCallback(async () => {
+        setLoadingTrust(true);
+        try {
+            const resp = await fetch('/api/trust-score/supplier/me/refresh', { method: 'POST' });
+            if (resp.ok) setTrustScore(await resp.json());
+        } catch (e) {
+            console.warn('refreshTrustScore failed', e);
+        } finally {
+            setLoadingTrust(false);
+        }
+    }, []);
+
+    const fetchBankScore = useCallback(async () => {
+        setLoadingBankScore(true);
+        try {
+            const resp = await fetch('/api/trust-score/bank/me');
+            if (resp.ok) setBankScore(await resp.json());
+        } catch (e) {
+            console.warn('fetchBankScore failed', e);
+        } finally {
+            setLoadingBankScore(false);
+        }
+    }, []);
+
+    const refreshBankScore = useCallback(async () => {
+        setLoadingBankScore(true);
+        try {
+            const resp = await fetch('/api/trust-score/bank/me/refresh', { method: 'POST' });
+            if (resp.ok) setBankScore(await resp.json());
+        } catch (e) {
+            console.warn('refreshBankScore failed', e);
+        } finally {
+            setLoadingBankScore(false);
+        }
+    }, []);
+
+    const fetchBuyerScore = useCallback(async (buyerId: string): Promise<BuyerTrustScoreData | null> => {
+        try {
+            const resp = await fetch(`/api/trust-score/buyer/${encodeURIComponent(buyerId)}`);
+            if (resp.ok) {
+                const data: BuyerTrustScoreData = await resp.json();
+                setBuyerScoreCache(prev => ({ ...prev, [buyerId]: data }));
+                return data;
+            }
+        } catch (e) {
+            console.warn('fetchBuyerScore failed', e);
+        }
+        return null;
+    }, []);
+
+    const refreshBuyerScore = useCallback(async (buyerId: string): Promise<BuyerTrustScoreData | null> => {
+        try {
+            const resp = await fetch(`/api/trust-score/buyer/${encodeURIComponent(buyerId)}/refresh`, { method: 'POST' });
+            if (resp.ok) {
+                const data: BuyerTrustScoreData = await resp.json();
+                setBuyerScoreCache(prev => ({ ...prev, [buyerId]: data }));
+                return data;
+            }
+        } catch (e) {
+            console.warn('refreshBuyerScore failed', e);
+        }
+        return null;
+    }, []);
 
     const fetchAll = useCallback(
         withErrorHandling('Fetching invoice finance data')(async () => {
@@ -220,6 +373,11 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
             bankOwnerships,
             paidInvoices,
             bidStatuses,
+            trustScore,
+            loadingTrust,
+            bankScore,
+            loadingBankScore,
+            buyerScoreCache,
             fetchAll,
             createInvoice,
             confirmInvoice,
@@ -230,6 +388,12 @@ export const InvoiceFinanceProvider = ({ children }: { children: React.ReactNode
             placeBid,
             getMyBidStatus,
             payFinancedInvoice,
+            fetchTrustScore,
+            refreshTrustScore,
+            fetchBankScore,
+            refreshBankScore,
+            fetchBuyerScore,
+            refreshBuyerScore,
             parseInvoice,
         }}>
             {children}

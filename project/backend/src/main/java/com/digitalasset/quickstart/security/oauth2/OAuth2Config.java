@@ -66,7 +66,12 @@ public class OAuth2Config {
                 .csrf((csrf) -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/auth/register")
+                        .ignoringRequestMatchers(
+                                "/auth/register",
+                                "/trust-score/bank/me/refresh",
+                                "/trust-score/supplier/me/refresh",
+                                "/trust-score/buyer/*/refresh"
+                        )
                 )
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/user", "/login-links", "/feature-flags", "/oauth2/authorization/**").permitAll()

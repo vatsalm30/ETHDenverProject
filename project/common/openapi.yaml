@@ -1544,6 +1544,98 @@ components:
           description: >
             Average of all sealed bids placed so far. Visible to all eligible institutions
             as a market calibration signal. Null when no bids placed.
+        supplierTier:
+          type: string
+          nullable: true
+          description: ZK-verified trust tier (PLATINUM|GOLD|SILVER|UNRATED|PROVISIONAL)
+        supplierCertified:
+          type: boolean
+          nullable: true
+          description: Whether the supplier is ZK-certified for unrestricted auctions
+        supplierTrustScore:
+          type: integer
+          nullable: true
+          description: Total ZK trust score earned
+        supplierMaxScore:
+          type: integer
+          nullable: true
+          description: Maximum possible score excluding PENDING proofs
+        supplierPendingCount:
+          type: integer
+          nullable: true
+          description: Number of ZK proofs in PENDING state (no history yet)
+        supplierReason:
+          type: string
+          nullable: true
+          description: Human-readable explanation of the trust tier
+        invoiceValueCap:
+          type: integer
+          nullable: true
+          description: Max invoice value allowed ($5000 for PROVISIONAL, null otherwise)
+        proof1Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL"
+        proof2Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        proof3Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        proof4Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        buyerTier:
+          type: string
+          nullable: true
+          description: ZK-verified buyer trust tier (PLATINUM|GOLD|SILVER|UNRATED|PROVISIONAL)
+        buyerCertified:
+          type: boolean
+          nullable: true
+          description: Whether the buyer is ZK-certified
+        buyerTrustScore:
+          type: integer
+          nullable: true
+          description: Total ZK buyer trust score earned (max 10)
+        buyerMaxScore:
+          type: integer
+          nullable: true
+          description: Maximum possible buyer score excluding PENDING proofs
+        buyerPendingCount:
+          type: integer
+          nullable: true
+          description: Number of buyer ZK proofs in PENDING state
+        buyerReason:
+          type: string
+          nullable: true
+          description: Human-readable explanation of the buyer trust tier
+        buyerProof1Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        buyerProof2Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        buyerProof3Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        buyerProof4Status:
+          type: string
+          nullable: true
+          description: "PASS | FAIL | PENDING"
+        combinedRisk:
+          type: string
+          nullable: true
+          description: "LOW RISK | MEDIUM RISK | ELEVATED RISK | HIGH RISK"
+        highRiskBuyer:
+          type: boolean
+          nullable: true
+          description: True when buyer is UNRATED — flagged for bank visibility
 
     GrabAuctionRequest:
       type: object

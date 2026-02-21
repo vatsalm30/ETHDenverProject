@@ -169,6 +169,31 @@ public class AuctionBidStore {
     }
 
     /**
+     * Returns the next best bidder excluding the specified username.
+     * Used when the winning bank fails re-verification at settlement.
+     */
+    public Optional<WinnerInfo> getNextCertifiedWinner(String auctionContractId, String excludeUsername) {
+        AuctionBids auctionBids = auctionBidMap.get(auctionContractId);
+        if (auctionBids == null) return Optional.empty();
+
+        auctionBids.lock.lock();
+        try {
+            String bestKey = null;
+            double bestRate = Double.MAX_VALUE;
+            for (Map.Entry<String, Double> entry : auctionBids.bids.entrySet()) {
+                if (entry.getKey().equals(excludeUsername)) continue;
+                if (entry.getValue() < bestRate) {
+                    bestRate = entry.getValue();
+                    bestKey = entry.getKey();
+                }
+            }
+            return bestKey != null ? Optional.of(new WinnerInfo(bestKey, bestRate)) : Optional.empty();
+        } finally {
+            auctionBids.lock.unlock();
+        }
+    }
+
+    /**
      * Removes all bid state for an auction after it has been settled or cancelled.
      * Called by InvoiceFinanceApiImpl after closeAuction completes.
      */
