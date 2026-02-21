@@ -1,3 +1,195 @@
+# Deadline Derby / Canton Quickstart — Single Run Guide
+
+This is the **one main document** for the repository.
+All setup, run, development, testing, architecture, security, and ops notes were condensed here.
+
+---
+## 1) What this project is
+
+Full-stack Canton Network app scaffold + ETHDenver invoice-finance flow:
+- Daml smart contracts
+- Spring Boot backend
+- React + Vite frontend
+- Docker Compose runtime (participant, validator, DB, auth, optional observability)
+
+Main working directory for commands:
+```bash
+cd project
+```
+
+---
+## 2) Prerequisites
+
+Minimum recommended:
+- Docker + Docker Compose (Docker memory: **8 GB+**)
+- Make
+- Node.js + npm
+- Java 21 (for local build tooling)
+- Daml SDK (can be installed/updated via Make target)
+
+If environment tooling is configured in this repo:
+---
+
+## 3) Fastest way to run (first time)
+
+From repository root:
+```bash
+cd project
+make setup
+make build
+make start
+```
+### What `make setup` asks you
+
+- auth mode: `oauth2` (default) or `shared-secret`
+- observability on/off
+- test mode on/off
+You can re-run `make setup` any time.
+
+---
+## 4) Main URLs after startup
+
+- App frontend: http://app-provider.localhost:3000
+- App user wallet: http://wallet.localhost:2000
+- App provider wallet: http://wallet.localhost:3000
+- ANS UIs: http://ans.localhost:2000 and http://ans.localhost:3000
+- Backend API: http://localhost:8080
+- Swagger UI (host): http://localhost:9090
+
+If enabled:
+- Keycloak: http://keycloak.localhost:8082
+- Grafana: http://localhost:3030
+- SV UI: http://sv.localhost:4000
+- Scan UI: http://scan.localhost:4000
+
+---
+## 5) Daily commands (project/)
+
+```bash
+make start              # start services
+make stop               # stop services
+make status             # container status
+make logs               # logs
+make tail               # follow logs
+
+make build              # full build
+make build-daml         # Daml + DARs
+make build-backend      # backend build
+make build-frontend     # frontend build
+
+make restart-backend
+make restart-frontend
+
+make clean-all          # wipe artifacts, containers, volumes
+make install-daml-sdk   # install/upgrade Daml SDK
+```
+
+---
+
+## 6) Frontend local dev (hot reload)
+
+Terminal A (from `project/`):
+
+```bash
+make start-vite-dev
+```
+
+Terminal B (from `project/frontend/`):
+
+```bash
+npm run dev
+```
+
+Useful frontend commands:
+
+```bash
+npm run gen:openapi
+npm run lint
+```
+
+---
+
+## 7) Testing
+
+From `project/`:
+
+```bash
+make test
+make test-daml
+make integration-test
+```
+
+Integration tests use Playwright under `project/integration-test`.
+
+---
+
+## 8) Core architecture (short)
+
+- Smart contracts: `project/daml/` (includes invoice-finance package)
+- Backend API/service: `project/backend/`
+- Frontend UI: `project/frontend/`
+- Shared API contract: `project/common/openapi.yaml`
+- Runtime orchestration: `project/compose.yaml` + module compose/env files
+
+Privacy model (Canton): contract visibility is enforced at ledger delivery level.
+
+---
+
+## 9) Security + auth summary
+
+Supported auth modes:
+- `oauth2` (Keycloak)
+- `shared-secret`
+
+General security notes:
+- Do not expose local demo credentials/services to public internet.
+- Use OAuth2 for realistic browser/user flows.
+- Demo includes app-layer tenant/ownership rules for user-level isolation.
+
+Vulnerability reporting (upstream policy):
+https://www.digitalasset.com/responsible-disclosure
+
+---
+
+## 10) Troubleshooting quick fixes
+
+If startup/build fails:
+
+```bash
+cd project
+make clean-all
+make build
+make start
+```
+
+Also check:
+- Docker has enough memory (8 GB+)
+- Daml SDK is current (`make install-daml-sdk`)
+- logs (`make logs` / `make tail`)
+
+To collect logs bundle:
+
+```bash
+cd project
+make capture-logs
+# in another shell after reproducing issue:
+tar -czvf quickstart-logs.tar.gz logs
+```
+
+---
+
+## 11) Important legal note
+
+This repo inherits Digital Asset Quickstart terms/licensing conditions.
+By using the software/binaries, you are subject to those terms.
+
+---
+
+## 12) One-line startup reminder
+
+```bash
+cd project && make setup && make build && make start
+```
 # Canton Network application quickstart
 
 **Note**: On July 2, 2025, the quickstart underwent an architectural change and no longer connects to DevNet.

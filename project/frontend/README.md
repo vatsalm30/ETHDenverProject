@@ -1,3 +1,8 @@
+# Moved
+
+Frontend run/dev instructions were consolidated into:
+
+**README.md**
 # Canton Network Quickstart Frontend
 
 This frontend enables interaction with the backend components of the Canton Network Quickstart.

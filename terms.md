@@ -1,3 +1,8 @@
+# Moved
+
+Terms and usage notes were consolidated into:
+
+**README.md**
 # Applicable Terms and Conditions for this Code Repository
 
 ## 1. Definitions

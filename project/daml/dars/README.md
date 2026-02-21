@@ -1,3 +1,8 @@
+# Moved
+
+This document was consolidated into the single main guide at the repository root:
+
+**README.md**
 # Pre-Generated DAR Files
 
 The DAR files located in this folder are from **Splice** to match the current SDK version.

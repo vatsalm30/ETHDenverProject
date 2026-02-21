@@ -1,3 +1,8 @@
+# Moved
+
+This document was consolidated into the single main guide at the repository root:
+
+**README.md**
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.

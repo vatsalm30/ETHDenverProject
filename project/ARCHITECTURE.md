@@ -1,3 +1,8 @@
+# Moved
+
+This document was consolidated into the single main guide at the repository root:
+
+**README.md**
 # Architecture: Canton Invoice Finance dApp
 
 ## Overview

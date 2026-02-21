@@ -1,3 +1,8 @@
+# Moved
+
+Observability notes were consolidated into:
+
+**README.md**
 # Introduction
 
 Canton Network Application Quickstart provides a set of observability services to help developers monitor and debug

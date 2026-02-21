@@ -1,3 +1,8 @@
+# Moved
+
+Testing guidance was consolidated into:
+
+**README.md**
 # Integration Testing
 
 This document outlines the end-to-end **integration tests** for ``Canton Network Quickstart``, covering:

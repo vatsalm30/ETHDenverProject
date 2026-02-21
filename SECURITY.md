@@ -1,3 +1,8 @@
+# Moved
+
+Security and run guidance were consolidated into:
+
+**README.md**
 # Security Policy
 ## Supported Versions
 The latest released version of the Canton Network Quickstart is supported with security updates. You can find the latest version at: https://github.com/digital-asset/cn-quickstart/

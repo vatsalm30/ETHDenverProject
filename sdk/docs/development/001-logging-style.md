@@ -1,3 +1,8 @@
+# Moved
+
+Developer guidance was consolidated into:
+
+**README.md**
 # Logging Style Guide
 
 ## 1. Objectives

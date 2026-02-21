@@ -1,3 +1,8 @@
+# Moved
+
+This document was consolidated into the single main guide at the repository root:
+
+**README.md**
 # Security Model: Canton Invoice Finance dApp
 
 ## Authentication Modes

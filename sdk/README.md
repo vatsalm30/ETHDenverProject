@@ -1,3 +1,8 @@
+# Moved
+
+Documentation and run instructions were consolidated into:
+
+**README.md**
 # Documentation Tooling
 
 This directory contains the source files for user facing documentation and tooling to validate and test changes.

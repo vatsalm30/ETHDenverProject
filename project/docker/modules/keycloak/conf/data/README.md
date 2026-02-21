@@ -1,3 +1,8 @@
+# Moved
+
+This document was consolidated into the single main guide at the repository root:
+
+**README.md**
 # Keycloak export
 Keycloak imports configuration from `docker/oauth/data/*.json` files on startup. Those file were exported from Keycloak that had been configured in Keycloak Administration Console as described below using 
 ```sh

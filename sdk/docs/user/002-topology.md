@@ -1,3 +1,8 @@
+# Moved
+
+Topology notes were consolidated into:
+
+**README.md**
 # Canton Network Quickstart Infrastructure Overview
 
 This document provides an overview of the Canton Network infrastructure and the environment in which the Quickstart App operates. 
