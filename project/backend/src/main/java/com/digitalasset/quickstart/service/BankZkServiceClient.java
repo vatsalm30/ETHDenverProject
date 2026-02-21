@@ -62,18 +62,18 @@ public class BankZkServiceClient {
         @JsonProperty("timestamp")      public String  timestamp;
     }
 
-    /** Returns a blocked score when ZK service is unreachable — never allows bidding. */
+    /** Returns a fallback score when ZK service is unreachable — bidding still allowed. */
     public static BankTrustScore blockedDefault(String bank, String reason) {
         var s = new BankTrustScore();
         s.bank           = bank;
-        s.proofXStatus   = "FAIL";
+        s.proofXStatus   = "PENDING";
         s.proofYStatus   = "PENDING";
-        s.proofZStatus   = "FAIL";
+        s.proofZStatus   = "PENDING";
         s.totalScore     = 0;
-        s.tier           = "SUSPENDED";
+        s.tier           = "PROBATIONARY";
         s.certified      = false;
-        s.canBid         = false;
-        s.reason         = reason != null ? reason : "Bank verification service unreachable — bidding blocked";
+        s.canBid         = true;
+        s.reason         = reason != null ? reason : "Bank verification service unavailable — bidding allowed with unverified status";
         s.allProofsValid = false;
         s.timestamp      = java.time.Instant.now().toString();
         return s;

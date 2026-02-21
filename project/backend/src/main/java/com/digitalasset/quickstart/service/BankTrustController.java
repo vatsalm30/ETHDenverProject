@@ -41,6 +41,32 @@ public class BankTrustController {
     public CompletableFuture<ResponseEntity<Map<String, Object>>> getMyBankScore() {
         String username = currentUsername();
         if (username == null) return CompletableFuture.completedFuture(ResponseEntity.status(401).build());
+
+        // Auto-trigger ZK calculation on first page load if no cached score exists
+        boolean hasCachedScore = false;
+        try {
+            var rows = jdbcTemplate.queryForList(
+                    "SELECT username FROM bank_trust_scores WHERE username = ?", username);
+            hasCachedScore = !rows.isEmpty();
+        } catch (Exception e) {
+            logger.warn("getMyBankScore: cache check: {}", e.getMessage());
+        }
+
+        if (!hasCachedScore) {
+            double reserves  = getReserves(username);
+            double financing = getFinancingAmount(username);
+            Long   regTs     = getRegistrationTimestamp(username);
+            int    avgRate   = getNetworkAverageRate();
+            int    lastRate  = getLastOfferedRate(username);
+            return zkClient.getBankTrustScore(
+                    username, reserves, financing, regTs,
+                    System.currentTimeMillis() / 1000L, avgRate, lastRate
+            ).thenApply(score -> {
+                persistScore(username, score, reserves, financing, regTs, lastRate);
+                return ResponseEntity.ok(fullScoreMap(username, score));
+            });
+        }
+
         return CompletableFuture.completedFuture(ResponseEntity.ok(loadOrDefault(username)));
     }
 

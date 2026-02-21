@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: 0BSD */
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Barlow', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -23,6 +23,6 @@ a {
 }
 
 button {
-  font-family: inherit;
+  font-family: 'Barlow Condensed', 'Barlow', sans-serif;
   cursor: pointer;
 }

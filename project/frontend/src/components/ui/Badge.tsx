@@ -9,23 +9,29 @@ interface BadgeProps {
     style?: React.CSSProperties;
 }
 
-const statusMap: Record<string, { bg: string; color: string }> = {
-    CONFIRMED:            { bg: 'rgba(79,70,229,0.12)',  color: 'var(--c-primary)' },
-    PENDING_CONFIRMATION: { bg: 'rgba(245,158,11,0.12)', color: '#92400e' },
-    IN_AUCTION:           { bg: 'rgba(124,58,237,0.12)', color: 'var(--c-gold)' },
-    FINANCED:             { bg: 'rgba(16,185,129,0.12)', color: '#065f46' },
-    PAID:                 { bg: 'rgba(16,185,129,0.12)', color: '#065f46' },
-    OPEN:                 { bg: 'rgba(79,70,229,0.12)',  color: 'var(--c-primary)' },
-    CLOSED:               { bg: 'rgba(107,114,128,0.12)', color: 'var(--c-muted)' },
+const statusMap: Record<string, { bg: string; color: string; border: string }> = {
+    CONFIRMED:            { bg: 'var(--teal-bg)',  color: 'var(--teal)',  border: 'rgba(0,180,166,0.25)' },
+    PENDING_CONFIRMATION: { bg: 'var(--amber-bg)', color: 'var(--amber)', border: 'rgba(210,153,34,0.25)' },
+    IN_AUCTION:           { bg: 'var(--amber-bg)', color: 'var(--amber)', border: 'rgba(210,153,34,0.25)' },
+    FINANCED:             { bg: 'rgba(63,185,80,0.10)', color: 'var(--green)', border: 'rgba(63,185,80,0.25)' },
+    PAID:                 { bg: 'rgba(63,185,80,0.10)', color: 'var(--green)', border: 'rgba(63,185,80,0.25)' },
+    OPEN:                 { bg: 'var(--teal-bg)',  color: 'var(--teal)',  border: 'rgba(0,180,166,0.25)' },
+    CLOSED:               { bg: 'var(--surface3)', color: 'var(--text-3)', border: 'var(--border)' },
 };
 
 const Badge: React.FC<BadgeProps> = ({ status, style }) => {
-    const c = statusMap[status] ?? { bg: 'rgba(107,114,128,0.12)', color: 'var(--c-muted)' };
+    const c = statusMap[status] ?? { bg: 'var(--surface3)', color: 'var(--text-3)', border: 'var(--border)' };
     return (
         <span style={{
-            background: c.bg, color: c.color,
-            padding: '3px 10px', borderRadius: 999,
-            fontSize: 11, fontWeight: 700,
+            background: c.bg,
+            color: c.color,
+            border: `1px solid ${c.border}`,
+            padding: '2px 7px',
+            fontSize: '0.65rem',
+            fontFamily: "'Barlow Condensed', sans-serif",
+            fontWeight: 700,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '1px',
             display: 'inline-block',
             ...style,
         }}>

@@ -6,16 +6,16 @@ type ModalProps = {
     title: React.ReactNode;
     onClose: () => void;
     onConfirm?: () => void;
-    children?: React.ReactNode;            // body content
-    footer?: React.ReactNode;              // optional footer; default renders a Close button
-    size?: 'sm' | 'lg' | 'xl';             // Bootstrap sizes
-    centered?: boolean;                    // center vertically
-    backdrop?: 'static' | true | false;    // 'static' disables outside click to close
-    zIndexBase?: number;                   // base z-index for backdrop; modal = base+5
-    className?: string;                    // extra classes for the .modal container
-    dialogClassName?: string;              // extra classes for the .modal-dialog
-    contentClassName?: string;             // extra classes for the .modal-content
-    confirmButtonClassName?: string;       // extra classes for the confirm button
+    children?: React.ReactNode;
+    footer?: React.ReactNode;
+    size?: 'sm' | 'lg' | 'xl';
+    centered?: boolean;
+    backdrop?: 'static' | true | false;
+    zIndexBase?: number;
+    className?: string;
+    dialogClassName?: string;
+    contentClassName?: string;
+    confirmButtonClassName?: string;
     confirmButtonLabel?: string;
     confirmButtonDisabled?: boolean;
 };
@@ -69,7 +69,7 @@ export default function Modal({
             {backdrop !== false && (
                 <div
                     className="modal-backdrop fade show"
-                    style={{ zIndex: zIndexBase }}
+                    style={{ zIndex: zIndexBase, background: 'rgba(0,0,0,0.7)' }}
                     onClick={handleBackdropClick}
                 />
             )}

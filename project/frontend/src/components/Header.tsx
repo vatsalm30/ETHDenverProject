@@ -3,7 +3,6 @@
 
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useUserStore } from '../stores/userStore';
 import { useProfile } from '../stores/profileStore';
 import { useTheme } from '../stores/themeStore';
@@ -19,8 +18,6 @@ const Header: React.FC = () => {
     }, [fetchUser]);
 
     const isCompany = myProfile?.type === 'COMPANY';
-    const isInstitution = myProfile?.type === 'INSTITUTION';
-    const accent = isCompany ? 'var(--c-primary)' : isInstitution ? 'var(--c-gold)' : 'var(--c-primary)';
 
     const handleLogout = () => {
         logout();
@@ -32,136 +29,138 @@ const Header: React.FC = () => {
             position: 'sticky',
             top: 0,
             zIndex: 1000,
-            background: 'var(--c-glass)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            borderBottom: '1px solid var(--c-border)',
-            boxShadow: 'var(--c-shadow)',
         }}>
             <div style={{
-                maxWidth: 1200,
-                margin: '0 auto',
-                padding: '0 24px',
-                height: 60,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                background: 'var(--surface)',
+                borderBottom: '1px solid var(--border)',
+                height: 54,
             }}>
-                {/* Brand */}
-                <Link to="/dashboard" style={{ textDecoration: 'none' }}>
-                    <motion.div
-                        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                    >
+                <div style={{
+                    maxWidth: 1200,
+                    margin: '0 auto',
+                    padding: '0 16px',
+                    height: 54,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                }}>
+                    {/* Brand */}
+                    <Link to="/dashboard" style={{ textDecoration: 'none' }}>
                         <span style={{
-                            fontSize: 18,
-                            fontWeight: 900,
-                            background: 'var(--c-gradient)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text',
-                            letterSpacing: '-0.5px',
-                        }}>
-                            Invoice Now
-                        </span>
-                    </motion.div>
-                </Link>
-
-                {/* Right side */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {/* Theme toggle */}
-                    <motion.button
-                        onClick={toggle}
-                        whileHover={{ scale: 1.08 }}
-                        whileTap={{ scale: 0.93 }}
-                        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-                        style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 999,
-                            border: '1.5px solid var(--c-border)',
-                            background: 'transparent',
-                            color: 'var(--c-muted)',
+                            fontFamily: "'Barlow Condensed', sans-serif",
                             fontSize: 16,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                        }}
-                    >
-                        {theme === 'light' ? '🌙' : '☀️'}
-                    </motion.button>
+                            fontWeight: 900,
+                            color: 'var(--red)',
+                            letterSpacing: '2px',
+                            textTransform: 'uppercase' as const,
+                        }}>
+                            INVOICE NOW
+                        </span>
+                    </Link>
 
-                    {!loading && user !== null && (
-                        <>
-                            {myProfile && (
-                                <motion.div
-                                    initial={{ opacity: 0, x: 10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    style={{
+                    {/* Right side */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Theme toggle */}
+                        <button
+                            onClick={toggle}
+                            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                            style={{
+                                width: 32,
+                                height: 32,
+                                border: '1px solid var(--border2)',
+                                background: 'transparent',
+                                color: 'var(--text-3)',
+                                fontSize: 14,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                            }}
+                        >
+                            {theme === 'light' ? '☾' : '☀'}
+                        </button>
+
+                        {!loading && user !== null && (
+                            <>
+                                {myProfile && (
+                                    <div style={{
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: 6,
-                                        padding: '5px 14px',
-                                        borderRadius: 999,
-                                        fontSize: 13,
+                                        padding: '4px 10px',
+                                        fontSize: 12,
+                                        fontFamily: "'Barlow Condensed', sans-serif",
                                         fontWeight: 700,
-                                        background: 'var(--c-border)',
-                                        color: accent,
-                                        border: `1.5px solid ${accent}30`,
+                                        textTransform: 'uppercase' as const,
+                                        letterSpacing: '1px',
+                                        background: 'var(--surface2)',
+                                        color: 'var(--text-1)',
+                                        border: '1px solid var(--border)',
+                                    }}>
+                                        <span style={{
+                                            fontFamily: "'Share Tech Mono', monospace",
+                                            fontSize: 11,
+                                            color: isCompany ? 'var(--red)' : 'var(--amber)',
+                                        }}>
+                                            {isCompany ? 'CO' : 'IN'}
+                                        </span>
+                                        <span>{myProfile.displayName ?? user.name}</span>
+                                        <span style={{
+                                            color: 'var(--text-3)',
+                                            fontSize: 10,
+                                            fontWeight: 600,
+                                        }}>
+                                            {isCompany ? 'COMPANY' : 'INSTITUTION'}
+                                        </span>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleLogout}
+                                    style={{
+                                        padding: '6px 14px',
+                                        border: '1px solid var(--border2)',
+                                        background: 'transparent',
+                                        color: 'var(--text-2)',
+                                        fontFamily: "'Barlow Condensed', sans-serif",
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        textTransform: 'uppercase' as const,
+                                        letterSpacing: '1.5px',
+                                        cursor: 'pointer',
                                     }}
                                 >
-                                    <span>{isCompany ? '🏭' : '🏦'}</span>
-                                    <span>{myProfile.displayName ?? user.name}</span>
-                                    <span style={{ opacity: 0.7, fontSize: 11 }}>
-                                        · {isCompany ? 'Company' : 'Institution'}
-                                    </span>
-                                </motion.div>
-                            )}
-                            <motion.button
-                                onClick={handleLogout}
-                                whileHover={{ scale: 1.03 }}
-                                whileTap={{ scale: 0.97 }}
-                                style={{
-                                    padding: '6px 16px',
-                                    borderRadius: 999,
-                                    border: '1.5px solid var(--c-border)',
-                                    background: 'transparent',
-                                    color: 'var(--c-muted)',
-                                    fontSize: 13,
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s',
-                                }}
-                            >
-                                Sign Out
-                            </motion.button>
-                        </>
-                    )}
-                    {!loading && user === null && (
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                                    SIGN OUT
+                                </button>
+                            </>
+                        )}
+                        {!loading && user === null && (
                             <Link
                                 to="/select-role"
                                 style={{
                                     display: 'inline-block',
-                                    padding: '6px 18px',
-                                    borderRadius: 999,
-                                    background: 'var(--c-gradient)',
+                                    padding: '6px 16px',
+                                    background: 'var(--red)',
                                     color: '#fff',
                                     textDecoration: 'none',
-                                    fontSize: 13,
+                                    fontFamily: "'Barlow Condensed', sans-serif",
+                                    fontSize: 11,
                                     fontWeight: 700,
-                                    boxShadow: '0 3px 12px rgba(79,70,229,0.25)',
+                                    textTransform: 'uppercase' as const,
+                                    letterSpacing: '1.5px',
                                 }}
                             >
-                                Get Started →
+                                GET STARTED
                             </Link>
-                        </motion.div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
+            {/* 2px accent gradient line */}
+            <div style={{
+                height: 2,
+                background: 'linear-gradient(90deg, #e8002d 25%, transparent 100%)',
+            }} />
         </header>
     );
 };

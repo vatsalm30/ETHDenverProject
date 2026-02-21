@@ -28,16 +28,41 @@ const App: React.FC = () => {
 
     return (
         <AppProviders>
-            <Header />
-            <main style={{ minHeight: '100vh' }}>
-                <Routes>
-                    <Route path="/" element={<HomeView />} />
-                    <Route path="/select-role" element={<SelectRoleView />} />
-                    <Route path="/login" element={<LoginView />} />
-                    <Route path="/dashboard" element={<DashboardView />} />
-                    <Route path="/admin/network" element={<AdminNetworkView />} />
-                </Routes>
-            </main>
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+                <Header />
+                <main style={{ flex: 1 }}>
+                    <Routes>
+                        <Route path="/" element={<HomeView />} />
+                        <Route path="/select-role" element={<SelectRoleView />} />
+                        <Route path="/login" element={<LoginView />} />
+                        <Route path="/dashboard" element={<DashboardView />} />
+                        <Route path="/admin/network" element={<AdminNetworkView />} />
+                    </Routes>
+                </main>
+                {/* Bottom ticker bar */}
+                <div style={{
+                    height: 26,
+                    background: 'var(--surface)',
+                    borderTop: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 16px',
+                    gap: 16,
+                    fontFamily: "'Share Tech Mono', monospace",
+                    fontSize: '0.59rem',
+                    color: 'var(--text-3)',
+                    flexShrink: 0,
+                }}>
+                    <span>CANTON NETWORK</span>
+                    <span style={{ color: 'var(--border2)' }}>│</span>
+                    <span>GLOBAL SYNCHRONIZER</span>
+                    <span style={{ color: 'var(--border2)' }}>│</span>
+                    <span>ZK TRUST SCORING</span>
+                    <span style={{ marginLeft: 'auto' }}>
+                        {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                </div>
+            </div>
             <ToastNotification />
         </AppProviders>
     );

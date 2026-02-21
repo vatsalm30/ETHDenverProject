@@ -3,7 +3,6 @@
 // @bit invoice.ui/Button
 
 import React from 'react';
-import { motion } from 'framer-motion';
 
 interface ButtonProps {
     onClick?: () => void;
@@ -18,49 +17,47 @@ interface ButtonProps {
 const Button: React.FC<ButtonProps> = ({
     onClick, variant = 'primary', size = 'md', disabled, children, style, type = 'button',
 }) => {
-    const pad = size === 'sm' ? '6px 14px' : size === 'lg' ? '14px 28px' : '10px 20px';
-    const fs = size === 'sm' ? 12 : size === 'lg' ? 16 : 14;
+    const pad = size === 'sm' ? '6px 12px' : size === 'lg' ? '10px 20px' : '8px 16px';
+    const fs = size === 'sm' ? 11 : size === 'lg' ? 13 : 12;
 
     const variants: Record<string, React.CSSProperties> = {
         primary: {
-            background: disabled ? 'var(--c-border)' : 'var(--c-gradient)',
-            color: disabled ? 'var(--c-muted)' : '#fff',
+            background: disabled ? 'var(--surface3)' : 'var(--red)',
+            color: disabled ? 'var(--text-3)' : '#fff',
             border: 'none',
-            boxShadow: disabled ? 'none' : '0 4px 14px rgba(79,70,229,0.25)',
         },
         outline: {
             background: 'transparent',
-            color: 'var(--c-primary)',
-            border: '2px solid var(--c-primary)',
+            color: 'var(--text-2)',
+            border: '1px solid var(--border2)',
         },
         ghost: {
             background: 'transparent',
-            color: 'var(--c-primary)',
+            color: 'var(--text-2)',
             border: 'none',
         },
     };
 
     return (
-        <motion.button
+        <button
             type={type}
             onClick={onClick}
             disabled={disabled}
-            whileHover={{ scale: disabled ? 1 : 1.02 }}
-            whileTap={{ scale: disabled ? 1 : 0.97 }}
             style={{
                 padding: pad,
                 fontSize: fs,
+                fontFamily: "'Barlow Condensed', sans-serif",
                 fontWeight: 700,
-                borderRadius: 10,
+                textTransform: 'uppercase' as const,
+                letterSpacing: '1.5px',
                 cursor: disabled ? 'default' : 'pointer',
-                fontFamily: 'inherit',
-                transition: 'all 0.15s',
+                transition: 'background-color 0.1s',
                 ...variants[variant],
                 ...style,
             }}
         >
             {children}
-        </motion.button>
+        </button>
     );
 };
 

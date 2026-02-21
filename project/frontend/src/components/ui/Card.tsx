@@ -3,12 +3,6 @@
 // @bit invoice.ui/Card
 
 import React from 'react';
-import { motion } from 'framer-motion';
-
-const fadeUp = {
-    hidden: { opacity: 0, y: 20, scale: 0.98 },
-    visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 280, damping: 22 } },
-};
 
 interface CardProps {
     children: React.ReactNode;
@@ -18,28 +12,16 @@ interface CardProps {
     animate?: boolean;
 }
 
-const Card: React.FC<CardProps> = ({ children, style, onClick, noPad, animate = true }) => {
+const Card: React.FC<CardProps> = ({ children, style, onClick, noPad }) => {
     const base: React.CSSProperties = {
-        background: 'var(--c-glass)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid var(--c-border)',
-        borderRadius: 16,
-        padding: noPad ? 0 : 20,
-        marginBottom: 14,
-        boxShadow: 'var(--c-shadow)',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        padding: noPad ? 0 : '12px 14px',
+        marginBottom: 2,
         ...style,
     };
 
-    if (!animate) {
-        return <div style={base} onClick={onClick}>{children}</div>;
-    }
-
-    return (
-        <motion.div variants={fadeUp} onClick={onClick} style={base}>
-            {children}
-        </motion.div>
-    );
+    return <div style={base} onClick={onClick}>{children}</div>;
 };
 
 export default Card;

@@ -18,35 +18,43 @@ import type {
     CloseAuctionResult,
 } from '../openapi.d.ts';
 
-// ─── Design tokens (all CSS vars — updates automatically with dark mode) ────
+// ─── Design tokens ───────────────────────────────────────────────────────────
 
 const C = {
-    primary:  'var(--c-primary)',
-    dark:     'var(--c-dark)',
-    gold:     'var(--c-gold)',
-    bg:       'var(--c-bg)',
-    text:     'var(--c-text)',
-    muted:    'var(--c-muted)',
-    glass:    'var(--c-glass)',
-    border:   'var(--c-border)',
-    shadow:   'var(--c-shadow)',
-    green:    '#10b981',
-    amber:    '#f59e0b',
-    gradient: 'var(--c-gradient)',
-    instGrad: 'linear-gradient(135deg, var(--c-gold) 0%, var(--c-primary) 100%)',
+    bg:       'var(--bg)',
+    surface:  'var(--surface)',
+    surface2: 'var(--surface2)',
+    surface3: 'var(--surface3)',
+    border:   'var(--border)',
+    border2:  'var(--border2)',
+    text1:    'var(--text-1)',
+    text2:    'var(--text-2)',
+    text3:    'var(--text-3)',
+    red:      'var(--red)',
+    redBg:    'var(--red-bg)',
+    teal:     'var(--teal)',
+    tealBg:   'var(--teal-bg)',
+    amber:    'var(--amber)',
+    amberBg:  'var(--amber-bg)',
+    green:    'var(--green)',
+
+    // legacy aliases used in logic
+    primary:  'var(--red)',
+    dark:     'var(--red)',
+    gold:     'var(--amber)',
+    text:     'var(--text-1)',
+    muted:    'var(--text-2)',
+    glass:    'var(--surface)',
+    shadow:   'none',
+    gradient: 'var(--red)',
+    instGrad: 'var(--amber)',
 };
 
-// ─── Animation variants ─────────────────────────────────────────────────────
-
-const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } } };
-const fadeUp = {
-    hidden: { opacity: 0, y: 20, scale: 0.98 },
-    visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 280, damping: 22 } },
-};
-const fadeIn = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.25 } },
-    exit:   { opacity: 0, transition: { duration: 0.15 } },
+// Font family constants
+const F = {
+    heading: "'Barlow Condensed', sans-serif",
+    mono:    "'Share Tech Mono', monospace",
+    body:    "'Barlow', sans-serif",
 };
 
 // ─── Shared primitives ──────────────────────────────────────────────────────
@@ -61,26 +69,20 @@ function daysUntil(dateStr: string | null | undefined): number {
 }
 
 const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties; onClick?: () => void }> = ({ children, style, onClick }) => (
-    <motion.div
-        variants={fadeUp}
+    <div
         onClick={onClick}
         style={{
-            background: C.glass,
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            background: C.surface,
             border: `1px solid ${C.border}`,
-            borderRadius: 16,
-            padding: 20,
-            marginBottom: 14,
-            boxShadow: C.shadow,
+            padding: '12px 14px',
+            marginBottom: 2,
             ...style,
         }}
     >
         {children}
-    </motion.div>
+    </div>
 );
 
-// GlassCard is the same as Card — no tilt effect for simplicity
 const GlassCard = Card;
 
 const Btn: React.FC<{
@@ -92,62 +94,73 @@ const Btn: React.FC<{
     children: React.ReactNode;
     style?: React.CSSProperties;
     type?: 'button' | 'submit';
-}> = ({ onClick, color = 'var(--c-primary)', variant = 'solid', small, disabled, children, style, type = 'button' }) => (
-    <motion.button
+}> = ({ onClick, color = C.red, variant = 'solid', small, disabled, children, style, type = 'button' }) => (
+    <button
         type={type}
         onClick={onClick}
         disabled={disabled}
-        whileHover={{ scale: disabled ? 1 : 1.03 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
         style={{
-            padding: small ? '7px 14px' : '11px 20px',
-            fontSize: small ? 12 : 14,
+            padding: small ? '5px 12px' : '8px 16px',
+            fontSize: small ? 11 : 12,
+            fontFamily: F.heading,
             fontWeight: 700,
-            borderRadius: 10,
-            border: variant === 'outline' ? `2px solid ${color}` : 'none',
-            background: disabled ? 'var(--c-border)' : variant === 'solid' ? color : 'transparent',
-            color: disabled ? 'var(--c-muted)' : variant === 'solid' ? '#fff' : color,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '1.5px',
+            border: variant === 'outline' ? `1px solid ${C.border2}` : 'none',
+            background: disabled ? C.surface3 : variant === 'solid' ? color : 'transparent',
+            color: disabled ? C.text3 : variant === 'solid' ? '#fff' : C.text2,
             cursor: disabled ? 'default' : 'pointer',
-            boxShadow: (!disabled && variant === 'solid') ? '0 4px 14px rgba(79,70,229,0.20)' : 'none',
-            fontFamily: 'inherit',
+            transition: 'background-color 0.1s',
             ...style,
         }}
     >
         {children}
-    </motion.button>
+    </button>
 );
 
-const Stat: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({ label, value, color = 'var(--c-primary)' }) => (
+const Stat: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({ label, value, color = C.red }) => (
     <div style={{
-        background: C.glass, backdropFilter: 'blur(12px)',
-        borderRadius: 14, padding: '14px 18px', textAlign: 'center',
-        border: `1px solid ${C.border}`, flex: 1,
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        padding: '10px 14px',
+        textAlign: 'center',
+        flex: 1,
     }}>
-        <div style={{ fontSize: 26, fontWeight: 900, color }}>{value}</div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 900, color }}>{value}</div>
+        <div style={{ fontFamily: F.heading, fontSize: '0.59rem', color: C.text3, marginTop: 2, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>{label}</div>
     </div>
 );
 
 const Tab: React.FC<{ label: string; active: boolean; count?: number; onClick: () => void; accent: string }> = ({
-    label, active, count, onClick, accent,
+    label, active, count, onClick,
 }) => (
     <button
         onClick={onClick}
         style={{
-            padding: '10px 18px', fontWeight: 700, fontSize: 14, border: 'none',
-            background: 'none', cursor: 'pointer', position: 'relative',
-            color: active ? accent : C.muted,
-            borderBottom: active ? `3px solid ${accent}` : '3px solid transparent',
-            marginBottom: -2,
-            transition: 'color 0.2s',
+            padding: '8px 16px',
+            fontFamily: F.heading,
+            fontWeight: active ? 700 : 600,
+            fontSize: 13,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '1px',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            position: 'relative',
+            color: active ? C.text1 : C.text3,
+            borderBottom: active ? `2px solid ${C.red}` : '2px solid transparent',
+            marginBottom: -1,
         }}
     >
         {label}
         {count != null && count > 0 && (
             <span style={{
-                marginLeft: 6, background: active ? accent : 'var(--c-border)',
-                color: active ? '#fff' : C.muted,
-                padding: '1px 7px', borderRadius: 999, fontSize: 11,
+                marginLeft: 6,
+                background: active ? C.red : C.surface3,
+                color: active ? '#fff' : C.text3,
+                padding: '1px 6px',
+                fontFamily: F.mono,
+                fontSize: 10,
             }}>
                 {count}
             </span>
@@ -156,36 +169,34 @@ const Tab: React.FC<{ label: string; active: boolean; count?: number; onClick: (
 );
 
 const EmptyState: React.FC<{ icon: string; message: string }> = ({ icon, message }) => (
-    <motion.div
-        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-        style={{ textAlign: 'center', padding: '48px 0', color: C.muted }}
-    >
-        <motion.div
-            animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ fontSize: 40, marginBottom: 12 }}
-        >
-            {icon}
-        </motion.div>
-        <div style={{ fontSize: 14 }}>{message}</div>
-    </motion.div>
+    <div style={{ textAlign: 'center', padding: '32px 0', color: C.text3 }}>
+        <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.5 }}>{icon}</div>
+        <div style={{ fontFamily: F.body, fontSize: 13 }}>{message}</div>
+    </div>
 );
 
 const StatusPill: React.FC<{ status: string }> = ({ status }) => {
-    const map: Record<string, { bg: string; fg: string }> = {
-        CONFIRMED:            { bg: 'rgba(79,70,229,0.12)',  fg: C.primary },
-        PENDING_CONFIRMATION: { bg: 'rgba(245,158,11,0.12)', fg: '#92400e' },
-        IN_AUCTION:           { bg: 'rgba(124,58,237,0.12)', fg: C.gold },
-        FINANCED:             { bg: 'rgba(16,185,129,0.12)', fg: '#065f46' },
-        PAID:                 { bg: 'rgba(16,185,129,0.12)', fg: '#065f46' },
-        OPEN:                 { bg: 'rgba(79,70,229,0.12)',  fg: C.primary },
-        CLOSED:               { bg: 'rgba(107,114,128,0.12)', fg: C.muted },
+    const map: Record<string, { bg: string; fg: string; border: string }> = {
+        CONFIRMED:            { bg: C.tealBg,  fg: C.teal,  border: 'rgba(0,180,166,0.25)' },
+        PENDING_CONFIRMATION: { bg: C.amberBg, fg: C.amber, border: 'rgba(210,153,34,0.25)' },
+        IN_AUCTION:           { bg: C.amberBg, fg: C.amber, border: 'rgba(210,153,34,0.25)' },
+        FINANCED:             { bg: 'rgba(63,185,80,0.10)', fg: C.green, border: 'rgba(63,185,80,0.25)' },
+        PAID:                 { bg: 'rgba(63,185,80,0.10)', fg: C.green, border: 'rgba(63,185,80,0.25)' },
+        OPEN:                 { bg: C.tealBg,  fg: C.teal,  border: 'rgba(0,180,166,0.25)' },
+        CLOSED:               { bg: C.surface3, fg: C.text3, border: C.border },
     };
-    const c = map[status] || { bg: 'rgba(107,114,128,0.12)', fg: '#374151' };
+    const c = map[status] || { bg: C.surface3, fg: C.text3, border: C.border };
     return (
         <span style={{
-            background: c.bg, color: c.fg, padding: '3px 10px',
-            borderRadius: 999, fontSize: 11, fontWeight: 800,
+            background: c.bg,
+            color: c.fg,
+            border: `1px solid ${c.border}`,
+            padding: '2px 7px',
+            fontFamily: F.heading,
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '1px',
         }}>
             {status.replace(/_/g, ' ')}
         </span>
@@ -195,24 +206,24 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
 const EvmSettlementBadge: React.FC<{ bridgeState?: string | null; txHash?: string | null }> = ({ bridgeState, txHash }) => {
     if (!bridgeState) return null;
     const cfg: Record<string, { label: string; bg: string; fg: string; dot: string }> = {
-        PENDING:    { label: 'Settlement Pending', bg: '#FFF3CD', fg: '#92400e', dot: '#f59e0b' },
-        CONFIRMING: { label: 'Confirming on EVM',  bg: 'rgba(124,58,237,0.10)', fg: 'var(--c-gold)', dot: '#7c3aed' },
-        CONFIRMED:  { label: 'EVM Confirmed',      bg: 'rgba(16,185,129,0.10)', fg: '#065f46', dot: '#10b981' },
+        PENDING:    { label: 'Settlement Pending', bg: C.amberBg,  fg: C.amber, dot: '#d29922' },
+        CONFIRMING: { label: 'Confirming on EVM',  bg: C.tealBg,   fg: C.teal,  dot: '#00b4a6' },
+        CONFIRMED:  { label: 'EVM Confirmed',      bg: 'rgba(63,185,80,0.10)', fg: C.green, dot: '#3fb950' },
     };
-    const c = cfg[bridgeState] ?? { label: bridgeState, bg: 'rgba(107,114,128,0.10)', fg: C.muted, dot: '#6b7280' };
+    const c = cfg[bridgeState] ?? { label: bridgeState, bg: C.surface3, fg: C.text3, dot: '#6b7280' };
     return (
-        <div style={{ background: c.bg, borderRadius: 8, padding: '8px 12px', marginTop: 10, fontSize: 12 }}>
+        <div style={{ background: c.bg, border: `1px solid ${c.fg}25`, padding: '6px 10px', marginTop: 6, fontSize: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: txHash ? 4 : 0 }}>
                 <motion.div
                     animate={bridgeState !== 'CONFIRMED' ? { opacity: [1, 0.3, 1] } : {}}
                     transition={{ duration: 1.2, repeat: Infinity }}
-                    style={{ width: 8, height: 8, borderRadius: '50%', background: c.dot, flexShrink: 0 }}
+                    style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, flexShrink: 0 }}
                 />
-                <span style={{ fontWeight: 700, color: c.fg }}>EVM Settlement: {c.label}</span>
+                <span style={{ fontFamily: F.heading, fontWeight: 700, color: c.fg, textTransform: 'uppercase' as const, letterSpacing: '1px', fontSize: 11 }}>EVM: {c.label}</span>
             </div>
             {txHash && (
-                <div style={{ fontFamily: 'monospace', fontSize: 11, color: c.fg, opacity: 0.8 }}>
-                    Tx: {txHash.substring(0, 12)}…
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: c.fg, opacity: 0.8 }}>
+                    TX {txHash.substring(0, 12)}…
                 </div>
             )}
         </div>
@@ -268,20 +279,24 @@ const AIInvoiceUpload: React.FC<{ onParsed: (f: ParsedFields) => void }> = ({ on
     }, [onParsed, toast]);
 
     return (
-        <div style={{ border: `2px dashed ${C.border}`, borderRadius: 12, padding: 14, background: 'rgba(79,70,229,0.04)', textAlign: 'center', marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.primary, marginBottom: 4 }}>🤖 AI Invoice Parser</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Upload an invoice image or PDF to auto-fill fields</div>
+        <div style={{ border: `1px dashed ${C.border2}`, padding: 12, background: C.surface2, textAlign: 'center', marginBottom: 12 }}>
+            <div style={{ fontFamily: F.heading, fontSize: 12, fontWeight: 700, color: C.teal, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>AI INVOICE PARSER</div>
+            <div style={{ fontFamily: F.body, fontSize: 12, color: C.text3, marginBottom: 6 }}>Upload an invoice image or PDF to auto-fill fields</div>
             <label style={{ cursor: loading ? 'wait' : 'pointer' }}>
                 <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleFile} disabled={loading} />
-                <motion.span
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    style={{ display: 'inline-block', padding: '6px 18px', background: loading ? 'var(--c-border)' : C.primary, color: loading ? C.muted : '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                >
-                    {loading ? '⏳ Parsing…' : '📎 Upload Invoice'}
-                </motion.span>
+                <span style={{
+                    display: 'inline-block', padding: '6px 16px',
+                    background: loading ? C.surface3 : C.teal,
+                    color: loading ? C.text3 : '#fff',
+                    fontFamily: F.heading, fontSize: 11, fontWeight: 700,
+                    textTransform: 'uppercase' as const, letterSpacing: '1.5px',
+                    cursor: 'pointer',
+                }}>
+                    {loading ? 'PARSING…' : 'UPLOAD INVOICE'}
+                </span>
             </label>
-            {status === 'parsed' && <div style={{ fontSize: 11, color: C.green, marginTop: 6, fontWeight: 700 }}>✅ {fileName} — fields populated</div>}
-            {status === 'error' && <div style={{ fontSize: 11, color: C.primary, marginTop: 6 }}>⚠️ Parse failed — fill manually</div>}
+            {status === 'parsed' && <div style={{ fontFamily: F.mono, fontSize: 11, color: C.green, marginTop: 6 }}>{fileName} — fields populated</div>}
+            {status === 'error' && <div style={{ fontFamily: F.mono, fontSize: 11, color: C.red, marginTop: 6 }}>Parse failed — fill manually</div>}
         </div>
     );
 };
@@ -295,67 +310,81 @@ const ProfileSetupModal: React.FC<{ onSave: (r: UpdateProfileRequest) => Promise
     const [saving, setSaving] = useState(false);
     const set = (key: keyof UpdateProfileRequest) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [key]: e.target.value }));
     const setNum = (key: keyof UpdateProfileRequest) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.value === '' ? undefined : Number(e.target.value) }));
-    const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: C.glass, color: C.text };
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '8px 12px',
+        border: `1px solid ${C.border2}`,
+        fontSize: 13, outline: 'none', boxSizing: 'border-box',
+        background: C.surface2, color: C.text1,
+        fontFamily: F.mono,
+    };
 
     return (
-        <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}
-        >
-            <motion.div
-                initial={{ scale: 0.88, y: 32 }} animate={{ scale: 1, y: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                style={{ background: 'var(--c-modal-bg)', borderRadius: 24, padding: 36, maxWidth: 520, width: '90%', boxShadow: '0 24px 60px rgba(0,0,0,0.20)', maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${C.border}` }}
-            >
-                <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                    <div style={{ fontSize: 44, marginBottom: 10 }}>📋</div>
-                    <h2 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 22, color: C.text }}>Set Up Your Profile</h2>
-                    <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>Tell us about your organization to get started</p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 24, maxWidth: 480, width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div style={{ marginBottom: 20 }}>
+                    <h2 style={{ margin: '0 0 4px', fontFamily: F.heading, fontWeight: 700, fontSize: 18, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>SET UP PROFILE</h2>
+                    <p style={{ margin: 0, color: C.text3, fontFamily: F.body, fontSize: 13 }}>Tell us about your organization to get started</p>
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
                     {(['COMPANY', 'INSTITUTION'] as const).map(t => (
                         <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))}
-                            style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', border: '2px solid', borderColor: form.type === t ? (t === 'COMPANY' ? C.primary : C.gold) : C.border, background: form.type === t ? 'rgba(79,70,229,0.08)' : 'transparent', color: form.type === t ? (t === 'COMPANY' ? C.primary : C.gold) : C.muted }}
+                            style={{
+                                flex: 1, padding: '8px 0',
+                                fontFamily: F.heading, fontWeight: 700, fontSize: 12,
+                                textTransform: 'uppercase' as const, letterSpacing: '1.5px',
+                                cursor: 'pointer',
+                                border: `1px solid ${form.type === t ? C.red : C.border}`,
+                                background: form.type === t ? C.redBg : 'transparent',
+                                color: form.type === t ? C.red : C.text3,
+                            }}
                         >
-                            {t === 'COMPANY' ? '🏭 Company' : '🏦 Institution'}
+                            {t}
                         </button>
                     ))}
                 </div>
                 <form onSubmit={async (e) => { e.preventDefault(); if (!form.displayName?.trim()) return; setSaving(true); try { await onSave(form); } finally { setSaving(false); } }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div style={{ gridColumn: '1/-1' }}>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>{form.type === 'COMPANY' ? 'Company' : 'Institution'} Name *</label>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>{form.type === 'COMPANY' ? 'Company' : 'Institution'} Name *</label>
                             <input value={form.displayName} onChange={set('displayName')} placeholder={form.type === 'COMPANY' ? 'Acme Corp' : 'First Capital Bank'} required style={inputStyle} />
                         </div>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Sector</label>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Sector</label>
                             <select value={form.sector ?? ''} onChange={set('sector')} style={{ ...inputStyle, cursor: 'pointer' }}>
                                 {SECTORS.map(s => <option key={s}>{s}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Founded Year</label>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Founded Year</label>
                             <input type="number" placeholder="2010" value={form.foundedYear ?? ''} onChange={setNum('foundedYear')} style={inputStyle} />
                         </div>
                         {form.type === 'COMPANY' && <>
                             <div>
-                                <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Annual Revenue ($)</label>
+                                <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Annual Revenue ($)</label>
                                 <input type="number" placeholder="5000000" value={form.annualRevenue ?? ''} onChange={setNum('annualRevenue')} style={inputStyle} />
                             </div>
                             <div>
-                                <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Employees</label>
+                                <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Employees</label>
                                 <input type="number" placeholder="50" value={form.employeeCount ?? ''} onChange={setNum('employeeCount')} style={inputStyle} />
                             </div>
                         </>}
                     </div>
-                    <motion.button type="submit" disabled={saving || !form.displayName?.trim()} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                        style={{ width: '100%', marginTop: 20, padding: '13px 0', background: saving || !form.displayName?.trim() ? 'var(--c-border)' : 'var(--c-gradient)', color: saving || !form.displayName?.trim() ? C.muted : '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: saving ? 'wait' : 'pointer', boxShadow: '0 4px 18px rgba(79,70,229,0.20)' }}
+                    <button type="submit" disabled={saving || !form.displayName?.trim()}
+                        style={{
+                            width: '100%', marginTop: 16, padding: '10px 0',
+                            background: saving || !form.displayName?.trim() ? C.surface3 : C.red,
+                            color: saving || !form.displayName?.trim() ? C.text3 : '#fff',
+                            border: 'none',
+                            fontFamily: F.heading, fontWeight: 700, fontSize: 13,
+                            textTransform: 'uppercase' as const, letterSpacing: '1.5px',
+                            cursor: saving ? 'wait' : 'pointer',
+                        }}
                     >
-                        {saving ? 'Saving…' : 'Get Started →'}
-                    </motion.button>
+                        {saving ? 'SAVING…' : 'GET STARTED'}
+                    </button>
                 </form>
-            </motion.div>
-        </motion.div>
+            </div>
+        </div>
     );
 };
 
@@ -376,7 +405,13 @@ const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateIn
     const [form, setForm] = useState({ invoiceId: 'INV-' + Date.now().toString().slice(-6), buyerParty: 'buyer-party', amount: '', description: '', paymentTermDays: '90', issueDate: today, dueDate: defaultDue });
     const [saving, setSaving] = useState(false);
     const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
-    const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: C.glass, color: C.text };
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '8px 12px',
+        border: `1px solid ${C.border2}`,
+        fontSize: 13, outline: 'none', boxSizing: 'border-box',
+        background: C.surface2, color: C.text1,
+        fontFamily: F.mono,
+    };
 
     const isProvisional = trustScore?.tier === 'PROVISIONAL';
     const cap = trustScore?.invoiceValueCap ?? 5000;
@@ -384,55 +419,49 @@ const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateIn
     const overCap = isProvisional && amountNum > cap;
 
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}
-        >
-            <motion.div initial={{ scale: 0.88, y: 32 }} animate={{ scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                style={{ background: 'var(--c-modal-bg)', borderRadius: 24, padding: 28, maxWidth: 520, width: '90%', boxShadow: 'var(--c-shadow)', maxHeight: '92vh', overflowY: 'auto', border: `1px solid ${C.border}` }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ margin: 0, fontWeight: 900, color: C.text }}>New Invoice</h3>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.muted }}>✕</button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 20, maxWidth: 480, width: '90%', maxHeight: '92vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, fontFamily: F.heading, fontWeight: 700, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '1px', fontSize: 16 }}>NEW INVOICE</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: C.text3 }}>✕</button>
                 </div>
 
                 {isProvisional && (
-                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                        style={{ background: '#DBEAFE', border: '1.5px solid #93c5fd', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}
-                    >
-                        <div style={{ fontWeight: 800, color: '#1e40af', fontSize: 13, marginBottom: 4 }}>
-                            🔄 Provisional Tier — Invoice cap: {fmt$(cap)}
+                    <div style={{ background: C.amberBg, border: `1px solid rgba(210,153,34,0.25)`, padding: '10px 14px', marginBottom: 12 }}>
+                        <div style={{ fontFamily: F.heading, fontWeight: 700, color: C.amber, fontSize: 12, textTransform: 'uppercase' as const, letterSpacing: '1px', marginBottom: 4 }}>
+                            PROVISIONAL TIER — CAP: {fmt$(cap)}
                         </div>
-                        <div style={{ fontSize: 12, color: '#1e3a8a' }}>
-                            Complete more invoices to unlock higher limits. Proofs 2–4 are still building your history.
+                        <div style={{ fontFamily: F.body, fontSize: 12, color: C.text2 }}>
+                            Complete more invoices to unlock higher limits.
                         </div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                            <span style={{ background: '#D1FAE5', color: '#065f46', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P1 ✅ Legitimate</span>
-                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P2 ⏳ Pending</span>
-                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P3 ⏳ Pending</span>
-                            <span style={{ background: '#FEF3C7', color: '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>P4 ⏳ Pending</span>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                            <span style={{ background: 'rgba(63,185,80,0.10)', color: C.green, border: '1px solid rgba(63,185,80,0.25)', padding: '2px 7px', fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>P1 PASS</span>
+                            <span style={{ background: C.amberBg, color: C.amber, border: '1px solid rgba(210,153,34,0.25)', padding: '2px 7px', fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>P2 PENDING</span>
+                            <span style={{ background: C.amberBg, color: C.amber, border: '1px solid rgba(210,153,34,0.25)', padding: '2px 7px', fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>P3 PENDING</span>
+                            <span style={{ background: C.amberBg, color: C.amber, border: '1px solid rgba(210,153,34,0.25)', padding: '2px 7px', fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>P4 PENDING</span>
                         </div>
-                    </motion.div>
+                    </div>
                 )}
 
                 <AIInvoiceUpload onParsed={f => setForm(p => ({ ...p, ...(f.invoiceId ? { invoiceId: f.invoiceId } : {}), ...(f.amount ? { amount: f.amount } : {}), ...(f.description ? { description: f.description } : {}), ...(f.issueDate ? { issueDate: f.issueDate } : {}), ...(f.dueDate ? { dueDate: f.dueDate } : {}) }))} />
                 <form onSubmit={async e => { e.preventDefault(); if (overCap) return; setSaving(true); try { await onCreate({ invoiceId: form.invoiceId, buyerParty: form.buyerParty, amount: parseFloat(form.amount), description: form.description, paymentTermDays: parseInt(form.paymentTermDays), issueDate: form.issueDate, dueDate: form.dueDate }); onClose(); } finally { setSaving(false); } }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Invoice ID *</label><input style={inputStyle} value={form.invoiceId} onChange={set('invoiceId')} required /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div><label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Invoice ID *</label><input style={inputStyle} value={form.invoiceId} onChange={set('invoiceId')} required /></div>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Amount ($) *</label>
-                            <input style={{ ...inputStyle, borderColor: overCap ? '#f87171' : C.border }} type="number" min="1" value={form.amount} onChange={set('amount')} placeholder="100000" required />
-                            {overCap && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3, fontWeight: 700 }}>⚠️ Exceeds your {fmt$(cap)} provisional cap</div>}
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Amount ($) *</label>
+                            <input style={{ ...inputStyle, borderColor: overCap ? C.red : C.border2 }} type="number" min="1" value={form.amount} onChange={set('amount')} placeholder="100000" required />
+                            {overCap && <div style={{ fontFamily: F.mono, fontSize: 11, color: C.red, marginTop: 2, fontWeight: 700 }}>Exceeds {fmt$(cap)} provisional cap</div>}
                         </div>
-                        <div style={{ gridColumn: '1/-1' }}><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Description *</label><input style={inputStyle} value={form.description} onChange={set('description')} placeholder="10,000 steel bolts" required /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Issue Date *</label><input style={inputStyle} type="date" value={form.issueDate} onChange={set('issueDate')} required /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Due Date *</label><input style={inputStyle} type="date" value={form.dueDate} onChange={set('dueDate')} required /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Payment Terms (days)</label><input style={inputStyle} type="number" value={form.paymentTermDays} onChange={set('paymentTermDays')} /></div>
+                        <div style={{ gridColumn: '1/-1' }}><label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Description *</label><input style={inputStyle} value={form.description} onChange={set('description')} placeholder="10,000 steel bolts" required /></div>
+                        <div><label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Issue Date *</label><input style={inputStyle} type="date" value={form.issueDate} onChange={set('issueDate')} required /></div>
+                        <div><label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Due Date *</label><input style={inputStyle} type="date" value={form.dueDate} onChange={set('dueDate')} required /></div>
+                        <div><label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Payment Terms (days)</label><input style={inputStyle} type="number" value={form.paymentTermDays} onChange={set('paymentTermDays')} /></div>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Buyer Party ID</label>
-                            <div style={{ display: 'flex', gap: 6 }}>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Buyer Party ID</label>
+                            <div style={{ display: 'flex', gap: 4 }}>
                                 <input style={{ ...inputStyle, flex: 1 }} value={form.buyerParty} onChange={e => { set('buyerParty')(e); setBuyerScore(null); }} />
-                                <Btn small color={C.gold} variant="outline" onClick={() => lookupBuyer(form.buyerParty)} disabled={buyerLookupLoading || !form.buyerParty.trim()}>
-                                    {buyerLookupLoading ? '⏳' : '🔍'}
+                                <Btn small color={C.amber} variant="outline" onClick={() => lookupBuyer(form.buyerParty)} disabled={buyerLookupLoading || !form.buyerParty.trim()}>
+                                    {buyerLookupLoading ? '…' : 'LOOKUP'}
                                 </Btn>
                             </div>
                         </div>
@@ -441,19 +470,17 @@ const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateIn
                         const bTierCfg = TIER_CFG[buyerScore.tier] ?? TIER_CFG.PROVISIONAL;
                         const isHighRisk = buyerScore.tier === 'UNRATED';
                         return (
-                            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                                style={{ background: isHighRisk ? '#FEE2E2' : bTierCfg.bg, border: `1.5px solid ${isHighRisk ? '#ef4444' : bTierCfg.color}44`, borderRadius: 12, padding: '12px 14px', marginTop: 10 }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                    <span style={{ fontWeight: 800, fontSize: 13, color: isHighRisk ? '#991b1b' : bTierCfg.color }}>
-                                        {bTierCfg.icon} Buyer: {buyerScore.tier}
-                                        {buyerScore.certified && !isHighRisk && <span style={{ marginLeft: 6, fontSize: 11 }}>✔ Certified</span>}
+                            <div style={{ background: isHighRisk ? C.redBg : bTierCfg.bg, border: `1px solid ${isHighRisk ? 'rgba(232,0,45,0.25)' : bTierCfg.border}`, padding: '10px 12px', marginTop: 8 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                    <span style={{ fontFamily: F.heading, fontWeight: 700, fontSize: 12, color: isHighRisk ? C.red : bTierCfg.color, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                                        BUYER: {buyerScore.tier}
+                                        {buyerScore.certified && !isHighRisk && <span style={{ marginLeft: 6, fontSize: 11 }}>CERTIFIED</span>}
                                     </span>
-                                    <span style={{ fontSize: 12, fontWeight: 700, color: isHighRisk ? '#991b1b' : bTierCfg.color }}>
+                                    <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: isHighRisk ? C.red : bTierCfg.color }}>
                                         {buyerScore.totalScore}/{buyerScore.maxPossibleScore}
                                     </span>
                                 </div>
-                                {isHighRisk && <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, marginBottom: 6 }}>⚠️ UNRATED buyer — banks will see HIGH RISK. Auction may attract fewer bids.</div>}
+                                {isHighRisk && <div style={{ fontFamily: F.body, fontSize: 11, color: C.red, fontWeight: 600, marginBottom: 4 }}>UNRATED buyer — banks will see HIGH RISK.</div>}
                                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                     {[
                                         { label: 'P1', status: buyerScore.proof1_status },
@@ -461,24 +488,30 @@ const InvoiceCreateModal: React.FC<{ onClose: () => void; onCreate: (r: CreateIn
                                         { label: 'P3', status: buyerScore.proof3_status },
                                         { label: 'P4', status: buyerScore.proof4_status },
                                     ].map(p => (
-                                        <span key={p.label} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: p.status === 'PASS' ? '#D1FAE5' : p.status === 'FAIL' ? '#FEE2E2' : '#F3F4F6', color: p.status === 'PASS' ? '#065f46' : p.status === 'FAIL' ? '#991b1b' : '#6b7280', border: p.status === 'PENDING' ? '1px dashed #d1d5db' : 'none' }}>
-                                            {p.label} {p.status === 'PASS' ? '✅' : p.status === 'FAIL' ? '❌' : '—'}
+                                        <span key={p.label} style={{
+                                            fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700,
+                                            padding: '2px 7px', textTransform: 'uppercase' as const, letterSpacing: '1px',
+                                            background: p.status === 'PASS' ? 'rgba(63,185,80,0.10)' : p.status === 'FAIL' ? C.redBg : C.surface3,
+                                            color: p.status === 'PASS' ? C.green : p.status === 'FAIL' ? C.red : C.text3,
+                                            border: `1px solid ${p.status === 'PASS' ? 'rgba(63,185,80,0.25)' : p.status === 'FAIL' ? 'rgba(232,0,45,0.25)' : C.border}`,
+                                        }}>
+                                            {p.label} {p.status === 'PASS' ? 'PASS' : p.status === 'FAIL' ? 'FAIL' : '—'}
                                         </span>
                                     ))}
                                 </div>
-                                {buyerScore.reason && <div style={{ fontSize: 11, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{buyerScore.reason}</div>}
-                            </motion.div>
+                                {buyerScore.reason && <div style={{ fontFamily: F.body, fontSize: 11, color: C.text3, fontStyle: 'italic', marginTop: 4 }}>{buyerScore.reason}</div>}
+                            </div>
                         );
                     })()}
-                    <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                        <Btn color={C.muted} variant="outline" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
-                        <Btn type="submit" disabled={saving || overCap} style={{ flex: 2, background: overCap ? 'var(--c-border)' : 'var(--c-gradient)' }}>
-                            {saving ? 'Creating…' : overCap ? `Cap: ${fmt$(cap)} (Provisional)` : 'Create Invoice →'}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                        <Btn color={C.text3} variant="outline" onClick={onClose} style={{ flex: 1 }}>CANCEL</Btn>
+                        <Btn type="submit" disabled={saving || overCap} style={{ flex: 2, background: overCap ? C.surface3 : C.red }}>
+                            {saving ? 'CREATING…' : overCap ? `CAP: ${fmt$(cap)}` : 'CREATE INVOICE'}
                         </Btn>
                     </div>
                 </form>
-            </motion.div>
-        </motion.div>
+            </div>
+        </div>
     );
 };
 
@@ -491,53 +524,54 @@ const StartAuctionModal: React.FC<{ invoice: InvoiceDto; onClose: () => void; on
     const [reserveRate, setReserveRate] = useState(95);
     const [saving, setSaving] = useState(false);
     const endDate = new Date(Date.now() + durationDays * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: C.glass, color: C.text };
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '8px 12px',
+        border: `1px solid ${C.border2}`,
+        fontSize: 13, outline: 'none', boxSizing: 'border-box',
+        background: C.surface2, color: C.text1, fontFamily: F.mono,
+    };
 
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}
-        >
-            <motion.div initial={{ scale: 0.88, y: 32 }} animate={{ scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                style={{ background: 'var(--c-modal-bg)', borderRadius: 24, padding: 28, maxWidth: 440, width: '90%', boxShadow: 'var(--c-shadow)', border: `1px solid ${C.border}` }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h3 style={{ margin: 0, fontWeight: 900, color: C.text }}>Launch Auction</h3>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.muted }}>✕</button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 20, maxWidth: 420, width: '90%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, fontFamily: F.heading, fontWeight: 700, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '1px', fontSize: 16 }}>LAUNCH AUCTION</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: C.text3 }}>✕</button>
                 </div>
-                <div style={{ background: 'rgba(79,70,229,0.06)', borderRadius: 12, padding: '12px 16px', marginBottom: 18, fontSize: 13 }}>
-                    <div style={{ fontWeight: 800, color: C.text }}>Invoice #{invoice.invoiceId}</div>
-                    <div style={{ color: C.muted }}>{invoice.description} · {fmt$(invoice.amount)} · Due {invoice.dueDate}</div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                    <div style={{ fontFamily: F.heading, fontWeight: 700, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Invoice #{invoice.invoiceId}</div>
+                    <div style={{ fontFamily: F.body, color: C.text3, fontSize: 12 }}>{invoice.description} · {fmt$(invoice.amount)} · Due {invoice.dueDate}</div>
                 </div>
                 <form onSubmit={async e => { e.preventDefault(); setSaving(true); try { await onStart({ auctionDurationDays: durationDays, auctionDurationSecs: durationDays * 86400, startRate, reserveRate, eligibleBanks: [] }); onClose(); } finally { setSaving(false); } }}>
-                    <div style={{ marginBottom: 14 }}>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Duration: <strong style={{ color: C.primary }}>{durationDays} days</strong> · Closes {endDate}</label>
-                        <input type="range" min={1} max={maxDays} value={durationDays} onChange={e => setDurationDays(parseInt(e.target.value))} style={{ width: '100%', accentColor: C.primary }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.muted, marginTop: 2 }}>
-                            <span>1 day</span><span>{maxDays} days (max)</span>
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Duration: <span style={{ color: C.teal, fontFamily: F.mono }}>{durationDays}d</span> · Closes {endDate}</label>
+                        <input type="range" min={1} max={maxDays} value={durationDays} onChange={e => setDurationDays(parseInt(e.target.value))} style={{ width: '100%', accentColor: '#e8002d' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: F.mono, fontSize: 10, color: C.text3, marginTop: 2 }}>
+                            <span>1d</span><span>{maxDays}d</span>
                         </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Opening Rate (%)</label>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Opening Rate (%)</label>
                             <input type="number" step="0.1" value={startRate} onChange={e => setStartRate(parseFloat(e.target.value))} style={inputStyle} />
                         </div>
                         <div>
-                            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>Reserve Rate (%)</label>
+                            <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Reserve Rate (%)</label>
                             <input type="number" step="0.1" value={reserveRate} onChange={e => setReserveRate(parseFloat(e.target.value))} style={inputStyle} />
                         </div>
                     </div>
-                    <div style={{ background: 'rgba(79,70,229,0.06)', borderRadius: 10, padding: '10px 14px', marginBottom: 18, fontSize: 12, color: C.primary }}>
-                        ℹ️ <strong>Sealed-bid auction:</strong> Institutions bid privately. The lowest rate wins at close. Bidding window closes on <strong>{endDate}</strong>.
+                    <div style={{ background: C.surface2, border: `1px solid ${C.border}`, padding: '8px 12px', marginBottom: 14, fontFamily: F.body, fontSize: 12, color: C.text2 }}>
+                        Sealed-bid auction. Lowest rate wins at close. Window closes <span style={{ fontFamily: F.mono, color: C.teal }}>{endDate}</span>.
                     </div>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                        <Btn color={C.muted} variant="outline" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
-                        <Btn type="submit" disabled={saving} style={{ flex: 2, background: 'var(--c-gradient)' }}>
-                            {saving ? 'Launching…' : 'Launch Auction →'}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <Btn color={C.text3} variant="outline" onClick={onClose} style={{ flex: 1 }}>CANCEL</Btn>
+                        <Btn type="submit" disabled={saving} style={{ flex: 2, background: C.red }}>
+                            {saving ? 'LAUNCHING…' : 'LAUNCH AUCTION'}
                         </Btn>
                     </div>
                 </form>
-            </motion.div>
-        </motion.div>
+            </div>
+        </div>
     );
 };
 
@@ -550,66 +584,61 @@ const AuctionStatusCard: React.FC<{ auction: FinancingAuctionDto; onClose: () =>
     const daysLeft = msLeft != null ? Math.floor(msLeft / 86400000) : null;
     const hoursLeft = msLeft != null ? Math.floor((msLeft % 86400000) / 3600000) : null;
     const timeDisplay = daysLeft != null
-        ? daysLeft > 0 ? `${daysLeft}d ${hoursLeft}h left` : `${hoursLeft}h left`
-        : `${Math.floor((auction.auctionDurationSecs ?? 86400) / 86400)}d total`;
+        ? daysLeft > 0 ? `${daysLeft}d ${hoursLeft}h` : `${hoursLeft}h`
+        : `${Math.floor((auction.auctionDurationSecs ?? 86400) / 86400)}d`;
     const endDateStr = endTime ? endTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
     const totalSecs = auction.auctionDurationSecs ?? 86400;
     const elapsed = endTime ? Math.max(0, totalSecs - (endTime.getTime() - now) / 1000) : 0;
     const progress = Math.min(1, elapsed / totalSecs);
 
     return (
-        <Card style={{ border: `2px solid ${C.primary}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <Card style={{ borderLeft: `2px solid ${C.red}`, background: 'rgba(232,0,45,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <div>
-                    <div style={{ fontSize: 13, color: C.muted, marginBottom: 4 }}>Invoice #{auction.invoiceId}</div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: C.text }}>{auction.description}</div>
-                    <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Face value: {fmt$(auction.amount)} · Due {auction.dueDate}</div>
+                    <div style={{ fontFamily: F.mono, fontSize: 12, color: C.text3, marginBottom: 2 }}>INV #{auction.invoiceId}</div>
+                    <div style={{ fontFamily: F.heading, fontSize: 16, fontWeight: 700, color: C.text1 }}>{auction.description}</div>
+                    <div style={{ fontFamily: F.body, fontSize: 12, color: C.text3, marginTop: 2 }}>Face: {fmt$(auction.amount)} · Due {auction.dueDate}</div>
                 </div>
                 <StatusPill status={auction.status} />
             </div>
 
-            <div style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.muted, marginBottom: 6 }}>
-                    <span>Auction started</span>
-                    <span>Closes {endDateStr}</span>
+            <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: F.mono, fontSize: 10, color: C.text3, marginBottom: 4 }}>
+                    <span>STARTED</span>
+                    <span>CLOSES {endDateStr}</span>
                 </div>
-                <div style={{ height: 6, borderRadius: 999, background: 'rgba(79,70,229,0.12)', overflow: 'hidden' }}>
-                    <motion.div
-                        style={{ height: '100%', borderRadius: 999, background: C.gradient, width: `${progress * 100}%` }}
-                        initial={{ width: 0 }} animate={{ width: `${progress * 100}%` }}
-                        transition={{ duration: 1, ease: 'easeOut' }}
-                    />
+                <div style={{ height: 3, background: C.surface3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: C.red, width: `${progress * 100}%`, transition: 'width 1s ease-out' }} />
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
-                <Stat label="Best Rate" value={auction.currentBestRate != null ? `${auction.currentBestRate.toFixed(1)}%` : '—'} color={C.primary} />
-                <Stat label="Bids Received" value={auction.bidCount ?? 0} color="#7c3aed" />
-                <Stat label="Time Left" value={<span style={{ fontSize: 16 }}>{timeDisplay}</span>} color={C.gold} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+                <Stat label="Best Rate" value={auction.currentBestRate != null ? `${auction.currentBestRate.toFixed(1)}%` : '—'} color={C.teal} />
+                <Stat label="Bids" value={auction.bidCount ?? 0} color={C.amber} />
+                <Stat label="Time Left" value={<span style={{ fontSize: 14 }}>{timeDisplay}</span>} color={C.red} />
             </div>
 
-            <div style={{ background: 'rgba(79,70,229,0.06)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.primary, marginBottom: 16 }}>
-                🔒 Bids are sealed — you see only the best rate and bid count. Winner is revealed at close.
+            <div style={{ background: C.surface2, border: `1px solid ${C.border}`, padding: '8px 12px', fontFamily: F.body, fontSize: 12, color: C.text2, marginBottom: 12 }}>
+                Bids are sealed — only best rate and bid count visible. Winner revealed at close.
             </div>
 
             {(auction.bidCount ?? 0) > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Verified Bidders:</div>
+                <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>Verified Bidders</div>
                     {Array.from({ length: auction.bidCount ?? 0 }, (_, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#D1FAE5', borderRadius: 8, marginBottom: 4 }}>
-                            <span style={{ fontSize: 12 }}>🏦</span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>Bank {i + 1}</span>
-                            <span style={{ fontSize: 10, fontWeight: 800, color: '#065f46', background: '#A7F3D0', padding: '2px 8px', borderRadius: 999 }}>CERTIFIED ✓</span>
-                            <span style={{ fontSize: 11, color: '#6B7280', marginLeft: 'auto' }}>Bid sealed</span>
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', background: 'rgba(63,185,80,0.05)', border: `1px solid rgba(63,185,80,0.15)`, marginBottom: 2, fontSize: 12 }}>
+                            <span style={{ fontFamily: F.heading, fontWeight: 700, color: C.green }}>BANK {i + 1}</span>
+                            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, color: C.green, background: 'rgba(63,185,80,0.10)', border: '1px solid rgba(63,185,80,0.25)', padding: '1px 6px', textTransform: 'uppercase' as const, letterSpacing: '1px' }}>CERTIFIED</span>
+                            <span style={{ fontFamily: F.mono, fontSize: 11, color: C.text3, marginLeft: 'auto' }}>SEALED</span>
                         </div>
                     ))}
                 </div>
             )}
 
-            <div style={{ display: 'flex', gap: 10 }}>
-                <Btn color={C.muted} variant="outline" small onClick={onCancel}>Cancel Auction</Btn>
-                <Btn style={{ flex: 1, background: 'var(--c-gradient)' }} onClick={onClose}>
-                    Close &amp; Settle Best Bid
+            <div style={{ display: 'flex', gap: 8 }}>
+                <Btn color={C.text3} variant="outline" small onClick={onCancel}>CANCEL AUCTION</Btn>
+                <Btn style={{ flex: 1, background: C.red }} onClick={onClose}>
+                    CLOSE &amp; SETTLE
                 </Btn>
             </div>
         </Card>
@@ -618,38 +647,42 @@ const AuctionStatusCard: React.FC<{ auction: FinancingAuctionDto; onClose: () =>
 
 // ─── Trust Score Panel ──────────────────────────────────────────────────────
 
-const TIER_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-    PLATINUM:    { label: 'Platinum',    color: '#374151', bg: '#E5E7EB', icon: '💎' },
-    GOLD:        { label: 'Gold',        color: '#92400e', bg: '#FEF3C7', icon: '🥇' },
-    SILVER:      { label: 'Silver',      color: '#374151', bg: '#F3F4F6', icon: '🥈' },
-    PROVISIONAL: { label: 'Provisional', color: '#1e40af', bg: '#DBEAFE', icon: '🔄' },
-    UNRATED:     { label: 'Unrated',     color: '#6b7280', bg: '#F9FAFB', icon: '❓' },
+const TIER_CFG: Record<string, { label: string; color: string; bg: string; border: string; icon: string }> = {
+    PLATINUM:    { label: 'PLATINUM',    color: C.text1,  bg: C.surface3, border: C.border2, icon: '◆' },
+    GOLD:        { label: 'GOLD',        color: '#d29922', bg: 'var(--amber-bg)', border: 'rgba(210,153,34,0.25)', icon: '▲' },
+    SILVER:      { label: 'SILVER',      color: C.text2,  bg: C.surface3, border: C.border, icon: '●' },
+    PROVISIONAL: { label: 'PROVISIONAL', color: '#00b4a6', bg: 'var(--teal-bg)', border: 'rgba(0,180,166,0.25)', icon: '○' },
+    UNRATED:     { label: 'UNRATED',     color: C.text3,  bg: C.surface3, border: C.border, icon: '—' },
 };
 
 const ProofRow: React.FC<{ label: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, status, points }) => {
-    const cfg = status === 'PASS' ? { icon: '✅', color: '#065f46', bg: '#D1FAE5' } : status === 'FAIL' ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2' } : { icon: '⏳', color: '#92400e', bg: '#FEF3C7' };
+    const cfg = status === 'PASS'
+        ? { color: C.green, bg: 'rgba(63,185,80,0.05)', border: 'rgba(63,185,80,0.15)' }
+        : status === 'FAIL'
+        ? { color: C.red, bg: C.redBg, border: 'rgba(232,0,45,0.15)' }
+        : { color: C.amber, bg: C.amberBg, border: 'rgba(210,153,34,0.15)' };
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, borderRadius: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 16 }}>{cfg.icon}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</span>
-            <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points} pts</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: cfg.bg, border: `1px solid ${cfg.border}`, marginBottom: 2 }}>
+            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase' as const, letterSpacing: '1px', width: 40 }}>{status}</span>
+            <span style={{ flex: 1, fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.text2 }}>{label}</span>
+            <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: cfg.color }}>{points}pt</span>
         </div>
     );
 };
 
 const BuyerProofRow: React.FC<{ label: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, status, points }) => {
     const cfg = status === 'PASS'
-        ? { icon: '✅', color: '#065f46', bg: '#D1FAE5', border: 'none' as const }
+        ? { color: C.green, bg: 'rgba(63,185,80,0.05)', border: 'rgba(63,185,80,0.15)' }
         : status === 'FAIL'
-        ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2', border: 'none' as const }
-        : { icon: '⬜', color: '#6b7280', bg: '#F3F4F6', border: '2px dashed #d1d5db' as const };
+        ? { color: C.red, bg: C.redBg, border: 'rgba(232,0,45,0.15)' }
+        : { color: C.text3, bg: C.surface3, border: C.border };
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, border: cfg.border, borderRadius: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 16 }}>{cfg.icon}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: cfg.bg, border: `1px solid ${cfg.border}`, marginBottom: 2 }}>
+            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase' as const, letterSpacing: '1px', width: 50 }}>{status}</span>
+            <span style={{ flex: 1, fontFamily: F.body, fontSize: 12, fontWeight: 600, color: C.text2 }}>{label}</span>
             {status === 'PENDING'
-                ? <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', fontStyle: 'italic' }}>Pending</span>
-                : <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points} pts</span>
+                ? <span style={{ fontFamily: F.mono, fontSize: 11, color: C.text3, fontStyle: 'italic' }}>—</span>
+                : <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: cfg.color }}>{points}pt</span>
             }
         </div>
     );
@@ -678,66 +711,62 @@ const CompanyIdentityCard: React.FC<{
     ] : [];
 
     return (
-        <GlassCard style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        <GlassCard style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                        <span style={{ fontSize: 22 }}>🏭</span>
-                        <span style={{ fontWeight: 900, fontSize: 18, color: C.text }}>{name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontFamily: F.heading, fontWeight: 700, fontSize: 16, color: C.text1 }}>{name}</span>
                         {sector && (
-                            <span style={{ fontSize: 11, background: 'rgba(79,70,229,0.10)', color: C.primary, padding: '2px 9px', borderRadius: 999, fontWeight: 700 }}>{sector}</span>
+                            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, background: C.surface3, color: C.text2, padding: '2px 7px', border: `1px solid ${C.border}`, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>{sector}</span>
                         )}
                     </div>
                     {trustScore && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 13, fontWeight: 800, padding: '3px 10px', background: tier!.bg, color: tier!.color, borderRadius: 999 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', background: tier!.bg, color: tier!.color, border: `1px solid ${tier!.border}`, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
                                 {tier!.icon} {tier!.label}
                             </span>
-                            {trustScore.certified && <span style={{ fontSize: 11, background: '#D1FAE5', color: '#065f46', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>✔ Certified</span>}
-                            {trustScore.invoiceValueCap != null && <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>Cap: ${trustScore.invoiceValueCap.toLocaleString()}</span>}
+                            {trustScore.certified && <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, background: 'rgba(63,185,80,0.10)', color: C.green, border: '1px solid rgba(63,185,80,0.25)', padding: '2px 7px', textTransform: 'uppercase' as const, letterSpacing: '1px' }}>CERTIFIED</span>}
+                            {trustScore.invoiceValueCap != null && <span style={{ fontFamily: F.mono, fontSize: 11, color: C.amber, fontWeight: 700 }}>CAP: ${trustScore.invoiceValueCap.toLocaleString()}</span>}
                         </div>
                     )}
-                    {!trustScore && !loadingTrust && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>No trust score yet</div>}
+                    {!trustScore && !loadingTrust && <div style={{ fontFamily: F.body, fontSize: 12, color: C.text3, marginTop: 4 }}>No trust score yet</div>}
                     {loadingTrust && !trustScore && (
-                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
-                            <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}>🔐 Computing trust score…</motion.span>
+                        <div style={{ fontFamily: F.mono, fontSize: 12, color: C.text3, marginTop: 4 }}>
+                            Computing trust score…
                         </div>
                     )}
                 </div>
 
                 {trustScore && (
-                    <div style={{ textAlign: 'right', minWidth: 120 }}>
-                        <div style={{ fontSize: 32, fontWeight: 900, color: C.primary, lineHeight: 1 }}>
+                    <div style={{ textAlign: 'right', minWidth: 100 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 28, fontWeight: 900, color: C.teal, lineHeight: 1 }}>
                             {trustScore.totalScore}
-                            <span style={{ fontSize: 14, color: C.muted, fontWeight: 600 }}>/{trustScore.maxPossibleScore}</span>
+                            <span style={{ fontSize: 13, color: C.text3, fontWeight: 600 }}>/{trustScore.maxPossibleScore}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>ZK Trust Score</div>
-                        <div style={{ width: 120, height: 6, borderRadius: 999, background: 'rgba(79,70,229,0.12)', overflow: 'hidden', marginLeft: 'auto' }}>
-                            <motion.div
-                                initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1, ease: 'easeOut' }}
-                                style={{ height: '100%', borderRadius: 999, background: C.gradient }}
-                            />
+                        <div style={{ fontFamily: F.heading, fontSize: '0.59rem', color: C.text3, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>ZK Trust Score</div>
+                        <div style={{ width: 100, height: 3, background: C.surface3, overflow: 'hidden', marginLeft: 'auto' }}>
+                            <div style={{ height: '100%', background: C.teal, width: `${pct}%`, transition: 'width 1s ease-out' }} />
                         </div>
-                        <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{pct.toFixed(0)}%</div>
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.text3, marginTop: 2 }}>{pct.toFixed(0)}%</div>
                     </div>
                 )}
             </div>
 
             {trustScore && (
-                <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <button onClick={() => setShowProofs(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}>
-                            🔐 ZK Proof Breakdown <span style={{ fontSize: 10 }}>{showProofs ? '▲' : '▼'}</span>
+                        <button onClick={() => setShowProofs(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: F.heading, fontSize: 11, fontWeight: 700, color: C.teal, display: 'flex', alignItems: 'center', gap: 4, padding: 0, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                            ZK PROOF BREAKDOWN <span style={{ fontSize: 10 }}>{showProofs ? '▲' : '▼'}</span>
                         </button>
-                        <Btn small color={C.muted} variant="ghost" onClick={onRefresh} disabled={loadingTrust}>
-                            {loadingTrust ? '⏳' : '🔄 Refresh'}
+                        <Btn small color={C.text3} variant="ghost" onClick={onRefresh} disabled={loadingTrust}>
+                            {loadingTrust ? '…' : 'REFRESH'}
                         </Btn>
                     </div>
                     <AnimatePresence>
                         {showProofs && (
-                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden', marginTop: 10 }}>
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden', marginTop: 8 }}>
                                 {proofs.map(p => <ProofRow key={p.label} {...p} />)}
-                                {trustScore.reason && <div style={{ fontSize: 12, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{trustScore.reason}</div>}
+                                {trustScore.reason && <div style={{ fontFamily: F.body, fontSize: 11, color: C.text3, fontStyle: 'italic', marginTop: 4 }}>{trustScore.reason}</div>}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -745,9 +774,9 @@ const CompanyIdentityCard: React.FC<{
             )}
 
             {!trustScore && !loadingTrust && (
-                <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-                    <Btn small onClick={onRefresh} style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
-                        🔐 Generate ZK Trust Score
+                <div style={{ marginTop: 8, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                    <Btn small onClick={onRefresh} style={{ background: C.teal }}>
+                        GENERATE ZK TRUST SCORE
                     </Btn>
                 </div>
             )}
@@ -779,13 +808,13 @@ const CompanyDashboard: React.FC = () => {
     }, []);
 
     return (
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 16px 40px' }}>
-            <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} style={{ marginBottom: 20 }}>
-                <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 24, color: C.text }}>
-                    Invoice Management
+        <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 14px 32px' }}>
+            <div style={{ marginBottom: 16 }}>
+                <h2 style={{ margin: '0 0 2px', fontFamily: F.heading, fontWeight: 700, fontSize: 18, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                    INVOICE MANAGEMENT
                 </h2>
-                <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>Submit invoices for financing. Receive early payment and improve cash flow.</p>
-            </motion.div>
+                <p style={{ margin: 0, fontFamily: F.body, color: C.text3, fontSize: 13 }}>Submit invoices for financing. Receive early payment.</p>
+            </div>
 
             {myProfile && (
                 <CompanyIdentityCard
@@ -797,81 +826,86 @@ const CompanyDashboard: React.FC = () => {
                 />
             )}
 
-            <motion.div variants={stagger} initial="hidden" animate="visible" style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Pending Invoices" value={invoices.length} color={C.primary} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Active Auction" value={openAuctions.length} color={openAuctions.length > 0 ? C.gold : C.muted} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Financed" value={financedInvoices.filter(i => i.paymentStatus !== 'PAID').length} color={C.green} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Paid Out" value={paidInvoices.length} color={C.muted} /></motion.div>
-            </motion.div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                <Stat label="Pending" value={invoices.length} color={C.red} />
+                <Stat label="Auctions" value={openAuctions.length} color={openAuctions.length > 0 ? C.amber : C.text3} />
+                <Stat label="Financed" value={financedInvoices.filter(i => i.paymentStatus !== 'PAID').length} color={C.green} />
+                <Stat label="Paid" value={paidInvoices.length} color={C.text3} />
+            </div>
 
-            <div style={{ display: 'flex', gap: 2, borderBottom: `2px solid ${C.border}`, marginBottom: 24, flexWrap: 'wrap' }}>
-                <Tab label="My Invoices" active={tab === 'invoices'} count={invoices.length} onClick={() => setTab('invoices')} accent={C.primary} />
-                <Tab label="Live Auction" active={tab === 'auction'} count={openAuctions.length} onClick={() => setTab('auction')} accent={C.primary} />
-                <Tab label="Financed" active={tab === 'financed'} count={financedInvoices.filter(i => i.paymentStatus !== 'PAID').length} onClick={() => setTab('financed')} accent={C.primary} />
-                <Tab label="Archive" active={tab === 'archive'} count={paidInvoices.length} onClick={() => setTab('archive')} accent={C.primary} />
+            <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${C.border}`, marginBottom: 16, flexWrap: 'wrap' }}>
+                <Tab label="My Invoices" active={tab === 'invoices'} count={invoices.length} onClick={() => setTab('invoices')} accent={C.red} />
+                <Tab label="Live Auction" active={tab === 'auction'} count={openAuctions.length} onClick={() => setTab('auction')} accent={C.red} />
+                <Tab label="Financed" active={tab === 'financed'} count={financedInvoices.filter(i => i.paymentStatus !== 'PAID').length} onClick={() => setTab('financed')} accent={C.red} />
+                <Tab label="Archive" active={tab === 'archive'} count={paidInvoices.length} onClick={() => setTab('archive')} accent={C.red} />
             </div>
 
             <AnimatePresence>
                 {closeResult && (
-                    <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                        style={{ background: closeResult.noWinner ? '#FFF3CD' : '#D1FAE5', border: `1px solid ${closeResult.noWinner ? '#FFC107' : C.green}`, borderRadius: 12, padding: '14px 18px', marginBottom: 20, position: 'relative' }}
-                    >
+                    <div style={{ background: closeResult.noWinner ? C.amberBg : 'rgba(63,185,80,0.05)', border: `1px solid ${closeResult.noWinner ? 'rgba(210,153,34,0.25)' : 'rgba(63,185,80,0.25)'}`, padding: '10px 14px', marginBottom: 12, position: 'relative' }}>
                         {closeResult.noWinner
-                            ? <span>⚠️ <strong>Auction closed with no bids.</strong> Invoice returned to your list.</span>
-                            : <span>✅ <strong>Auction settled!</strong> {closeResult.winningInstitutionDisplayName ?? 'An institution'} won at <strong>{closeResult.winningRate?.toFixed(2)}%</strong> — you received <strong>{fmt$(closeResult.purchaseAmount)}</strong> early payment.</span>
+                            ? <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>Auction closed with no bids. Invoice returned.</span>
+                            : <span style={{ fontFamily: F.body, fontSize: 13, color: C.green }}>Settled! {closeResult.winningInstitutionDisplayName ?? 'An institution'} won at <span style={{ fontFamily: F.mono }}>{closeResult.winningRate?.toFixed(2)}%</span> — received <span style={{ fontFamily: F.mono }}>{fmt$(closeResult.purchaseAmount)}</span></span>
                         }
-                        <button onClick={() => setCloseResult(null)} style={{ position: 'absolute', right: 14, top: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>✕</button>
-                    </motion.div>
+                        <button onClick={() => setCloseResult(null)} style={{ position: 'absolute', right: 10, top: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: C.text3 }}>✕</button>
+                    </div>
                 )}
             </AnimatePresence>
 
             <AnimatePresence mode="wait">
                 {tab === 'invoices' && (
-                    <motion.div key="invoices" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <h4 style={{ margin: 0, fontWeight: 800, color: C.text }}>My Invoices</h4>
-                            <Btn onClick={() => setShowCreate(true)} style={{ background: 'var(--c-gradient)' }}>+ New Invoice</Btn>
+                    <div key="invoices">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <h4 style={{ margin: 0, fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>MY INVOICES</h4>
+                            <Btn onClick={() => setShowCreate(true)} style={{ background: C.red }}>+ NEW INVOICE</Btn>
                         </div>
                         {invoices.length === 0 ? (
-                            <EmptyState icon="📋" message="No invoices yet. Create your first invoice to start the financing process." />
+                            <EmptyState icon="—" message="No invoices yet. Create your first to start." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {invoices.map(inv => (
                                     <Card key={inv.contractId}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                             <div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                                    <span style={{ fontWeight: 800, color: C.text }}>#{inv.invoiceId}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                                    <span style={{ fontFamily: F.mono, fontWeight: 700, color: C.text1, fontSize: 13 }}>#{inv.invoiceId}</span>
                                                     <StatusPill status={inv.status} />
                                                 </div>
-                                                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{inv.description}</div>
-                                                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                                                    {fmt$(inv.amount)} · Due {inv.dueDate} · {daysUntil(inv.dueDate)} days left
+                                                <div style={{ fontFamily: F.body, fontSize: 14, fontWeight: 600, color: C.text1 }}>{inv.description}</div>
+                                                <div style={{ fontFamily: F.mono, fontSize: 12, color: C.text3, marginTop: 2 }}>
+                                                    {fmt$(inv.amount)} · Due {inv.dueDate} · {daysUntil(inv.dueDate)}d left
                                                 </div>
-                                                <div style={{ marginTop: 6 }}>
-                                                    <span style={{ fontSize: 11, background: 'rgba(79,70,229,0.10)', color: C.primary, padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
-                                                        {daysUntil(inv.dueDate) > 60 ? 'Low urgency' : daysUntil(inv.dueDate) > 30 ? 'Medium urgency' : 'Urgent — launch soon'}
+                                                <div style={{ marginTop: 4 }}>
+                                                    <span style={{
+                                                        fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700,
+                                                        textTransform: 'uppercase' as const, letterSpacing: '1px',
+                                                        padding: '2px 7px',
+                                                        background: daysUntil(inv.dueDate) <= 30 ? C.redBg : daysUntil(inv.dueDate) <= 60 ? C.amberBg : C.tealBg,
+                                                        color: daysUntil(inv.dueDate) <= 30 ? C.red : daysUntil(inv.dueDate) <= 60 ? C.amber : C.teal,
+                                                        border: `1px solid ${daysUntil(inv.dueDate) <= 30 ? 'rgba(232,0,45,0.25)' : daysUntil(inv.dueDate) <= 60 ? 'rgba(210,153,34,0.25)' : 'rgba(0,180,166,0.25)'}`,
+                                                    }}>
+                                                        {daysUntil(inv.dueDate) > 60 ? 'LOW URGENCY' : daysUntil(inv.dueDate) > 30 ? 'MEDIUM' : 'URGENT'}
                                                     </span>
                                                 </div>
                                             </div>
-                                            <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>
-                                                <Btn small color={C.muted} variant="outline" onClick={() => deleteInvoice(inv.contractId)}>Delete</Btn>
-                                                {!hasActive && <Btn small style={{ background: 'var(--c-gradient)' }} onClick={() => setStartAuctionInvoice(inv)}>🚀 Launch Auction</Btn>}
-                                                {hasActive && <span style={{ fontSize: 12, color: C.muted, fontStyle: 'italic', paddingTop: 4 }}>Auction active</span>}
+                                            <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 12 }}>
+                                                <Btn small color={C.text3} variant="outline" onClick={() => deleteInvoice(inv.contractId)}>DEL</Btn>
+                                                {!hasActive && <Btn small style={{ background: C.red }} onClick={() => setStartAuctionInvoice(inv)}>AUCTION</Btn>}
+                                                {hasActive && <span style={{ fontFamily: F.mono, fontSize: 10, color: C.text3, paddingTop: 4 }}>active</span>}
                                             </div>
                                         </div>
                                     </Card>
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
 
                 {tab === 'auction' && (
-                    <motion.div key="auction" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>Live Auction</h4>
+                    <div key="auction">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>LIVE AUCTION</h4>
                         {!hasActive ? (
-                            <EmptyState icon="⚡" message="No active auction. Start one from the My Invoices tab." />
+                            <EmptyState icon="—" message="No active auction. Start one from My Invoices." />
                         ) : (
                             <AuctionStatusCard
                                 auction={activeAuction}
@@ -879,52 +913,52 @@ const CompanyDashboard: React.FC = () => {
                                 onCancel={() => cancelAuction(activeAuction.contractId)}
                             />
                         )}
-                    </motion.div>
+                    </div>
                 )}
 
                 {tab === 'financed' && (
-                    <motion.div key="financed" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>Financed Invoices</h4>
+                    <div key="financed">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>FINANCED</h4>
                         {financedInvoices.filter(i => i.paymentStatus !== 'PAID').length === 0 ? (
-                            <EmptyState icon="🏦" message="No financed invoices yet." />
+                            <EmptyState icon="—" message="No financed invoices yet." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {financedInvoices.filter(i => i.paymentStatus !== 'PAID').map(inv => (
                                     <GlassCard key={inv.contractId}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div>
-                                                <div style={{ fontWeight: 800, color: C.text, marginBottom: 4 }}>#{inv.invoiceId}</div>
-                                                <div style={{ fontSize: 14, color: C.text }}>{inv.description}</div>
-                                                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Face value: {fmt$(inv.amount)} · Due {inv.dueDate} · {daysUntil(inv.dueDate)} days</div>
+                                                <div style={{ fontFamily: F.mono, fontWeight: 700, color: C.text1, marginBottom: 2, fontSize: 13 }}>#{inv.invoiceId}</div>
+                                                <div style={{ fontFamily: F.body, fontSize: 13, color: C.text1 }}>{inv.description}</div>
+                                                <div style={{ fontFamily: F.mono, fontSize: 12, color: C.text3, marginTop: 2 }}>Face: {fmt$(inv.amount)} · Due {inv.dueDate} · {daysUntil(inv.dueDate)}d</div>
                                             </div>
-                                            <Btn color={C.green} onClick={() => payFinancedInvoice(inv.contractId)}>Pay Invoice</Btn>
+                                            <Btn color={C.green} onClick={() => payFinancedInvoice(inv.contractId)}>PAY</Btn>
                                         </div>
                                     </GlassCard>
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
 
                 {tab === 'archive' && (
-                    <motion.div key="archive" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>Settled Invoices</h4>
+                    <div key="archive">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>SETTLED</h4>
                         {paidInvoices.length === 0 ? (
-                            <EmptyState icon="📦" message="No paid invoices yet." />
+                            <EmptyState icon="—" message="No paid invoices yet." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {paidInvoices.map(inv => (
-                                    <GlassCard key={inv.contractId} style={{ padding: '14px 18px' }}>
+                                    <GlassCard key={inv.contractId} style={{ padding: '10px 14px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                                            <span style={{ color: C.text }}>#{inv.invoiceId} — {inv.description}</span>
-                                            <span style={{ fontWeight: 800, color: C.green }}>{fmt$(inv.amount)}</span>
+                                            <span style={{ fontFamily: F.body, color: C.text1 }}>#{inv.invoiceId} — {inv.description}</span>
+                                            <span style={{ fontFamily: F.mono, fontWeight: 700, color: C.green }}>{fmt$(inv.amount)}</span>
                                         </div>
                                         <EvmSettlementBadge bridgeState={(inv as any).bridgeState} txHash={(inv as any).paymentTxHash} />
                                     </GlassCard>
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
@@ -987,129 +1021,145 @@ const AuctionBidCard: React.FC<{
     };
 
     return (
-        <Card style={{ border: highRiskBuyer ? `2px solid #ef4444` : hasBid ? `2px solid ${C.gold}` : `1px solid ${C.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <Card style={{
+            borderLeft: highRiskBuyer ? `2px solid var(--red)` : hasBid ? `2px solid var(--amber)` : `1px solid ${C.border}`,
+            background: highRiskBuyer ? 'rgba(232,0,45,0.03)' : hasBid ? 'rgba(210,153,34,0.03)' : C.surface,
+        }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                 <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 800, color: C.text }}>#{auction.invoiceId}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: F.mono, fontWeight: 700, color: C.text1, fontSize: 13 }}>#{auction.invoiceId}</span>
                         {hasBid && (
-                            <motion.span
-                                initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400 }}
-                                style={{ background: isWinning ? '#D1FAE5' : '#FFF3CD', color: isWinning ? C.green : '#92400e', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 800 }}
-                            >
-                                {isWinning ? '🏆 WINNING BID' : '📋 BID PLACED'}
-                            </motion.span>
+                            <span style={{
+                                fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700,
+                                textTransform: 'uppercase' as const, letterSpacing: '1px',
+                                padding: '2px 7px',
+                                background: isWinning ? 'rgba(63,185,80,0.10)' : C.amberBg,
+                                color: isWinning ? C.green : C.amber,
+                                border: `1px solid ${isWinning ? 'rgba(63,185,80,0.25)' : 'rgba(210,153,34,0.25)'}`,
+                            }}>
+                                {isWinning ? 'WINNING' : 'BID PLACED'}
+                            </span>
                         )}
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>{auction.description}</div>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: C.muted }}>
-                        <span>💰 {fmt$(auction.amount)}</span>
-                        <span>📅 Due {auction.dueDate}</span>
-                        {daysLeft != null && <span>⏱ {daysLeft > 0 ? `Closes ${endDateStr}` : 'Closing soon'}</span>}
+                    <div style={{ fontFamily: F.body, fontSize: 14, fontWeight: 600, color: C.text1, marginBottom: 4 }}>{auction.description}</div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontFamily: F.mono, fontSize: 12, color: C.text3 }}>
+                        <span>{fmt$(auction.amount)}</span>
+                        <span>Due {auction.dueDate}</span>
+                        {daysLeft != null && <span>{daysLeft > 0 ? `Closes ${endDateStr}` : 'Closing soon'}</span>}
                     </div>
                 </div>
-                <div style={{ flexShrink: 0, marginLeft: 16 }}>
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 4 }}>
+                <div style={{ flexShrink: 0, marginLeft: 12 }}>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginBottom: 4 }}>
                         {tierCfg && (
-                            <div style={{ padding: '5px 8px', borderRadius: 10, background: tierCfg.bg, border: `1px solid ${tierCfg.color}22`, textAlign: 'center' }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, marginBottom: 1 }}>SUPPLIER</div>
-                                <div style={{ fontSize: 13 }}>{tierCfg.icon}</div>
-                                <div style={{ fontSize: 9, fontWeight: 900, color: tierCfg.color, whiteSpace: 'nowrap' }}>{tierCfg.label.toUpperCase()}</div>
-                                {supplierCertified && <div style={{ fontSize: 8, color: tierCfg.color, opacity: 0.85, fontWeight: 700 }}>✓</div>}
+                            <div style={{ padding: '4px 6px', background: tierCfg.bg, border: `1px solid ${tierCfg.border}`, textAlign: 'center' }}>
+                                <div style={{ fontFamily: F.heading, fontSize: 8, fontWeight: 700, color: C.text3, textTransform: 'uppercase' as const, letterSpacing: '1px', marginBottom: 1 }}>SUPPLIER</div>
+                                <div style={{ fontFamily: F.heading, fontSize: 9, fontWeight: 700, color: tierCfg.color }}>{tierCfg.label}</div>
+                                {supplierCertified && <div style={{ fontFamily: F.mono, fontSize: 8, color: C.green }}>✓</div>}
                             </div>
                         )}
                         {buyerTierCfg && (
-                            <div style={{ padding: '5px 8px', borderRadius: 10, background: buyerTierCfg.bg, border: highRiskBuyer ? `1px solid #ef4444` : `1px solid ${buyerTierCfg.color}22`, textAlign: 'center' }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, marginBottom: 1 }}>BUYER</div>
-                                <div style={{ fontSize: 13 }}>{buyerTierCfg.icon}</div>
-                                <div style={{ fontSize: 9, fontWeight: 900, color: highRiskBuyer ? '#ef4444' : buyerTierCfg.color, whiteSpace: 'nowrap' }}>{buyerTierCfg.label.toUpperCase()}</div>
-                                {highRiskBuyer && <div style={{ fontSize: 8, color: '#ef4444', fontWeight: 700 }}>⚠</div>}
-                                {buyerCertified && !highRiskBuyer && <div style={{ fontSize: 8, color: buyerTierCfg.color, opacity: 0.85, fontWeight: 700 }}>✓</div>}
+                            <div style={{ padding: '4px 6px', background: buyerTierCfg.bg, border: `1px solid ${highRiskBuyer ? 'rgba(232,0,45,0.4)' : buyerTierCfg.border}`, textAlign: 'center' }}>
+                                <div style={{ fontFamily: F.heading, fontSize: 8, fontWeight: 700, color: C.text3, textTransform: 'uppercase' as const, letterSpacing: '1px', marginBottom: 1 }}>BUYER</div>
+                                <div style={{ fontFamily: F.heading, fontSize: 9, fontWeight: 700, color: highRiskBuyer ? C.red : buyerTierCfg.color }}>{buyerTierCfg.label}</div>
+                                {highRiskBuyer && <div style={{ fontFamily: F.mono, fontSize: 8, color: C.red }}>!</div>}
+                                {buyerCertified && !highRiskBuyer && <div style={{ fontFamily: F.mono, fontSize: 8, color: C.green }}>✓</div>}
                             </div>
                         )}
                         {!tierCfg && !buyerTierCfg && (
-                            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--c-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontSize: 10, color: C.muted, fontWeight: 700 }}>—</span>
+                            <div style={{ width: 36, height: 36, background: C.surface3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontFamily: F.mono, fontSize: 10, color: C.text3 }}>—</span>
                             </div>
                         )}
                     </div>
                     {combinedRisk && (
-                        <div style={{ fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 999, textAlign: 'center', background: combinedRisk === 'LOW RISK' ? '#D1FAE5' : combinedRisk === 'MEDIUM RISK' ? '#FEF3C7' : combinedRisk === 'ELEVATED RISK' ? '#FED7AA' : '#FEE2E2', color: combinedRisk === 'LOW RISK' ? '#065f46' : combinedRisk === 'MEDIUM RISK' ? '#92400e' : combinedRisk === 'ELEVATED RISK' ? '#7c2d12' : '#991b1b' }}>
+                        <div style={{
+                            fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px',
+                            textAlign: 'center', textTransform: 'uppercase' as const, letterSpacing: '1px',
+                            background: combinedRisk === 'LOW RISK' ? 'rgba(63,185,80,0.10)' : combinedRisk === 'MEDIUM RISK' ? C.amberBg : C.redBg,
+                            color: combinedRisk === 'LOW RISK' ? C.green : combinedRisk === 'MEDIUM RISK' ? C.amber : C.red,
+                            border: `1px solid ${combinedRisk === 'LOW RISK' ? 'rgba(63,185,80,0.25)' : combinedRisk === 'MEDIUM RISK' ? 'rgba(210,153,34,0.25)' : 'rgba(232,0,45,0.25)'}`,
+                        }}>
                             {combinedRisk}
                         </div>
                     )}
                     {bestRate != null && (
-                        <div style={{ marginTop: 6, textAlign: 'right' }}>
-                            <div style={{ fontSize: 16, fontWeight: 900, color: C.primary }}>{bestRate.toFixed(2)}%</div>
-                            <div style={{ fontSize: 10, color: C.muted }}>best rate</div>
+                        <div style={{ marginTop: 4, textAlign: 'right' }}>
+                            <div style={{ fontFamily: F.mono, fontSize: 15, fontWeight: 900, color: C.teal }}>{bestRate.toFixed(2)}%</div>
+                            <div style={{ fontFamily: F.heading, fontSize: 9, color: C.text3, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>BEST RATE</div>
                         </div>
                     )}
                 </div>
             </div>
 
             {hasBid && bidStatus?.myRate != null && (
-                <div style={{ background: isWinning ? '#D1FAE5' : 'rgba(79,70,229,0.06)', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: isWinning ? C.green : C.primary }}>
-                    Your bid: <strong>{bidStatus.myRate.toFixed(2)}%</strong>
-                    {isWinning ? ' — 🏆 You have the best offer!' : bestRate != null ? ` — Best is ${bestRate.toFixed(2)}%` : ''}
+                <div style={{ background: isWinning ? 'rgba(63,185,80,0.05)' : C.surface2, border: `1px solid ${isWinning ? 'rgba(63,185,80,0.15)' : C.border}`, padding: '6px 10px', marginBottom: 8, fontFamily: F.body, fontSize: 12, color: isWinning ? C.green : C.text2 }}>
+                    Your bid: <span style={{ fontFamily: F.mono, fontWeight: 700 }}>{bidStatus.myRate.toFixed(2)}%</span>
+                    {isWinning ? ' — WINNING' : bestRate != null ? ` — Best: ${bestRate.toFixed(2)}%` : ''}
                     {bidStatus?.averageBid != null && (
-                        <span style={{ marginLeft: 8, color: C.gold }}>· Avg: {(bidStatus.averageBid as number).toFixed(2)}%</span>
+                        <span style={{ marginLeft: 8, fontFamily: F.mono, color: C.amber }}>Avg: {(bidStatus.averageBid as number).toFixed(2)}%</span>
                     )}
                 </div>
             )}
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 4 }}>
-                        {hasBid ? 'Update your rate (%)' : 'Your offered rate (%)'}
+                    <label style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: C.text3, display: 'block', marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: '2.5px' }}>
+                        {hasBid ? 'Update Rate (%)' : 'Offered Rate (%)'}
                     </label>
                     <input
                         type="number" step="0.01" min={auction.reserveRate} max={auction.startRate}
                         value={rate} onChange={e => setRate(e.target.value)}
                         placeholder={`${auction.reserveRate.toFixed(1)} – ${auction.startRate.toFixed(1)}`}
-                        style={{ width: '100%', padding: '10px 12px', border: `2px solid ${C.border}`, borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: C.glass, color: C.text }}
+                        style={{
+                            width: '100%', padding: '8px 12px',
+                            border: `1px solid ${C.border2}`,
+                            fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                            background: C.surface2, color: C.text1, fontFamily: F.mono,
+                        }}
                     />
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                        Lower rate = better chance of winning. Bids are sealed.
+                    <div style={{ fontFamily: F.body, fontSize: 11, color: C.text3, marginTop: 2 }}>
+                        Lower rate = better chance. Bids sealed.
                         {(auction.averageBid != null) && (
-                            <span style={{ marginLeft: 8, fontWeight: 700, color: C.gold }}>
-                                Market avg: {(auction.averageBid as number).toFixed(2)}%
+                            <span style={{ marginLeft: 8, fontFamily: F.mono, fontWeight: 700, color: C.amber }}>
+                                Mkt avg: {(auction.averageBid as number).toFixed(2)}%
                             </span>
                         )}
                     </div>
                 </div>
                 <Btn
-                    color={C.gold}
+                    color={C.amber}
                     disabled={bidding || !rate || bidBlocked}
                     onClick={handleBid}
-                    style={{ whiteSpace: 'nowrap', flexShrink: 0, background: bidding || bidBlocked ? 'var(--c-border)' : C.instGrad, cursor: bidBlocked ? 'not-allowed' : 'pointer' }}
+                    style={{ whiteSpace: 'nowrap', flexShrink: 0, background: bidding || bidBlocked ? C.surface3 : C.amber, cursor: bidBlocked ? 'not-allowed' : 'pointer' }}
                 >
-                    {bidBlocked ? '🔒 Not Certified' : bidding ? '…' : hasBid ? 'Update Bid' : 'Place Bid →'}
+                    {bidBlocked ? 'BLOCKED' : bidding ? '…' : hasBid ? 'UPDATE BID' : 'PLACE BID'}
                 </Btn>
             </div>
             {bidBlocked && bidBlockedReason && (
-                <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, marginTop: 4 }}>{bidBlockedReason}</div>
+                <div style={{ fontFamily: F.body, fontSize: 11, color: C.red, fontWeight: 600, marginTop: 4 }}>{bidBlockedReason}</div>
             )}
 
             {buyerTierCfg && (
-                <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-                    <button onClick={() => setShowBuyerProofs(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}>
-                        👤 Buyer ZK Trust Breakdown <span style={{ fontSize: 10 }}>{showBuyerProofs ? '▲' : '▼'}</span>
+                <div style={{ marginTop: 8, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                    <button onClick={() => setShowBuyerProofs(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: F.heading, fontSize: 11, fontWeight: 700, color: C.teal, display: 'flex', alignItems: 'center', gap: 4, padding: 0, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                        BUYER ZK TRUST <span style={{ fontSize: 10 }}>{showBuyerProofs ? '▲' : '▼'}</span>
                     </button>
                     <AnimatePresence>
                         {showBuyerProofs && (
-                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden', marginTop: 8 }}>
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden', marginTop: 6 }}>
                                 {buyerTrustScore != null && buyerMaxScore != null && (
-                                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                                        Buyer Score: <strong style={{ color: C.text }}>{buyerTrustScore}/{buyerMaxScore}</strong>
-                                        {buyerTier && <span style={{ marginLeft: 8, fontWeight: 700, color: buyerTierCfg.color }}>{buyerTierCfg.icon} {buyerTier}</span>}
+                                    <div style={{ fontFamily: F.body, fontSize: 12, color: C.text3, marginBottom: 6 }}>
+                                        Buyer Score: <span style={{ fontFamily: F.mono, fontWeight: 700, color: C.text1 }}>{buyerTrustScore}/{buyerMaxScore}</span>
+                                        {buyerTier && <span style={{ marginLeft: 8, fontFamily: F.heading, fontWeight: 700, color: buyerTierCfg.color }}>{buyerTier}</span>}
                                     </div>
                                 )}
                                 <BuyerProofRow label="P1 — Payment History (≥90%)" status={buyerProof1Status} points={3} />
                                 <BuyerProofRow label="P2 — Invoice Confirm Rate (≥80%)" status={buyerProof2Status} points={2} />
                                 <BuyerProofRow label="P3 — Dispute Record (≤5%)" status={buyerProof3Status} points={2} />
                                 <BuyerProofRow label="P4 — Payment Timeliness (≥85%)" status={buyerProof4Status} points={3} />
-                                {buyerReason && <div style={{ fontSize: 11, color: C.muted, fontStyle: 'italic', marginTop: 6 }}>{buyerReason}</div>}
-                                {highRiskBuyer && <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 700, marginTop: 6, padding: '6px 10px', background: '#FEE2E2', borderRadius: 8 }}>⚠️ UNRATED buyer — no verified payment history available.</div>}
+                                {buyerReason && <div style={{ fontFamily: F.body, fontSize: 11, color: C.text3, fontStyle: 'italic', marginTop: 4 }}>{buyerReason}</div>}
+                                {highRiskBuyer && <div style={{ fontFamily: F.body, fontSize: 12, color: C.red, fontWeight: 700, marginTop: 4, padding: '4px 8px', background: C.redBg, border: '1px solid rgba(232,0,45,0.25)' }}>UNRATED buyer — no verified payment history.</div>}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -1121,23 +1171,27 @@ const AuctionBidCard: React.FC<{
 
 // ─── Bank Certification Banner ──────────────────────────────────────────────
 
-const BANK_TIER_CFG: Record<string, { label: string; color: string; bg: string; icon: string; border: string }> = {
-    CERTIFIED:      { label: 'Certified',      color: '#065f46', bg: '#D1FAE5', icon: '✓', border: '#10b981' },
-    PROBATIONARY:   { label: 'Probationary',   color: '#92400e', bg: '#FEF3C7', icon: '⏳', border: '#f59e0b' },
-    SUSPENDED:      { label: 'Suspended',      color: '#991b1b', bg: '#FEE2E2', icon: '✗', border: '#ef4444' },
-    RATE_VIOLATION: { label: 'Rate Violation',  color: '#7c2d12', bg: '#FED7AA', icon: '⚠', border: '#ea580c' },
+const BANK_TIER_CFG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    CERTIFIED:      { label: 'CERTIFIED',      color: C.green,  bg: 'rgba(63,185,80,0.05)',  border: 'rgba(63,185,80,0.25)' },
+    PROBATIONARY:   { label: 'PROBATIONARY',   color: C.amber,  bg: C.amberBg,               border: 'rgba(210,153,34,0.25)' },
+    SUSPENDED:      { label: 'SUSPENDED',      color: C.red,    bg: C.redBg,                 border: 'rgba(232,0,45,0.25)' },
+    RATE_VIOLATION: { label: 'RATE VIOLATION',  color: C.red,    bg: C.redBg,                 border: 'rgba(232,0,45,0.25)' },
 };
 
 const BankProofRow: React.FC<{ label: string; detail: string; status: 'PASS' | 'FAIL' | 'PENDING'; points: number }> = ({ label, detail, status, points }) => {
-    const cfg = status === 'PASS' ? { icon: '✅', color: '#065f46', bg: '#D1FAE5' } : status === 'FAIL' ? { icon: '❌', color: '#991b1b', bg: '#FEE2E2' } : { icon: '⏳', color: '#92400e', bg: '#FEF3C7' };
+    const cfg = status === 'PASS'
+        ? { color: C.green, bg: 'rgba(63,185,80,0.05)', border: 'rgba(63,185,80,0.15)' }
+        : status === 'FAIL'
+        ? { color: C.red, bg: C.redBg, border: 'rgba(232,0,45,0.15)' }
+        : { color: C.amber, bg: C.amberBg, border: 'rgba(210,153,34,0.15)' };
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: cfg.bg, borderRadius: 10, marginBottom: 6 }}>
-            <span style={{ fontSize: 14 }}>{cfg.icon}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: cfg.bg, border: `1px solid ${cfg.border}`, marginBottom: 2 }}>
+            <span style={{ fontFamily: F.heading, fontSize: '0.65rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase' as const, letterSpacing: '1px', width: 40 }}>{status}</span>
             <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{label}</div>
-                <div style={{ fontSize: 11, color: cfg.color, opacity: 0.8 }}>{detail}</div>
+                <div style={{ fontFamily: F.heading, fontSize: 12, fontWeight: 700, color: cfg.color }}>{label}</div>
+                <div style={{ fontFamily: F.body, fontSize: 11, color: C.text3 }}>{detail}</div>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: cfg.color }}>{points}/1</span>
+            <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: cfg.color }}>{points}/1</span>
         </div>
     );
 };
@@ -1147,39 +1201,38 @@ const BankCertBanner: React.FC<{ bs: BankTrustScoreData; loading: boolean; onRef
     const [expanded, setExpanded] = useState(false);
 
     return (
-        <GlassCard style={{ marginBottom: 20, border: `2px solid ${tier.border}`, background: `${tier.bg}cc` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 20, fontWeight: 900, color: tier.color }}>{tier.icon}</span>
-                    <span style={{ fontWeight: 900, fontSize: 15, color: tier.color }}>{tier.label.toUpperCase()}</span>
-                    <span style={{ fontSize: 13, color: tier.color, fontWeight: 700 }}>· Score {bs.totalScore}/3</span>
+        <GlassCard style={{ marginBottom: 14, border: `1px solid ${tier.border}`, background: tier.bg }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: F.heading, fontSize: 13, fontWeight: 700, color: tier.color, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>{tier.label}</span>
+                    <span style={{ fontFamily: F.mono, fontSize: 12, color: tier.color, fontWeight: 700 }}>{bs.totalScore}/3</span>
                     {bs.canBid
-                        ? <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>· You can bid freely</span>
-                        : <span style={{ fontSize: 12, fontWeight: 700, color: '#991b1b' }}>· Bidding disabled</span>
+                        ? <span style={{ fontFamily: F.heading, fontSize: 11, fontWeight: 700, color: C.green, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>CAN BID</span>
+                        : <span style={{ fontFamily: F.heading, fontSize: 11, fontWeight: 700, color: C.red, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>DISABLED</span>
                     }
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 4 }}>
                     <Btn small color={tier.color} variant="ghost" onClick={() => setExpanded(v => !v)}>
-                        {expanded ? '▲ Hide' : '▼ Details'}
+                        {expanded ? 'HIDE' : 'DETAILS'}
                     </Btn>
-                    <Btn small color={C.muted} variant="ghost" onClick={onRefresh} disabled={loading}>
-                        {loading ? '⏳' : '🔄'}
+                    <Btn small color={C.text3} variant="ghost" onClick={onRefresh} disabled={loading}>
+                        {loading ? '…' : 'REFRESH'}
                     </Btn>
                 </div>
             </div>
 
             {!bs.canBid && bs.reason && (
-                <div style={{ marginTop: 8, fontSize: 12, color: tier.color, fontWeight: 600 }}>Reason: {bs.reason}</div>
+                <div style={{ marginTop: 6, fontFamily: F.body, fontSize: 11, color: tier.color, fontWeight: 600 }}>Reason: {bs.reason}</div>
             )}
 
             <AnimatePresence>
                 {expanded && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: 12 }}>
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: 8 }}>
                         <BankProofRow label="X  Liquidity" detail={bs.proofX_status === 'PASS' ? 'Reserves cover ≥110% of offer' : 'Reserves insufficient'} status={bs.proofX_status} points={bs.proofX_points} />
                         <BankProofRow label="Y  Legitimacy" detail={bs.proofY_status === 'PASS' ? 'Node active ≥30 days' : bs.proofY_status === 'PENDING' ? 'Node not yet 30 days old' : 'Node age check failed'} status={bs.proofY_status} points={bs.proofY_points} />
                         <BankProofRow label="Z  Rate Range" detail={bs.proofZ_status === 'PASS' ? 'Rate within network benchmark' : 'Rate exceeds network average by >20%'} status={bs.proofZ_status} points={bs.proofZ_points} />
-                        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
-                            Last verified: {bs.timestamp ? new Date(bs.timestamp).toLocaleString() : '—'}
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.text3, marginTop: 4 }}>
+                            Verified: {bs.timestamp ? new Date(bs.timestamp).toLocaleString() : '—'}
                         </div>
                     </motion.div>
                 )}
@@ -1213,45 +1266,45 @@ const InstitutionDashboard: React.FC = () => {
     const bidBlocked = bankScore ? !bankScore.canBid : false;
 
     return (
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 16px 40px' }}>
-            <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} style={{ marginBottom: 28 }}>
-                <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 24, color: C.text }}>
-                    Financing Opportunities
+        <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 14px 32px' }}>
+            <div style={{ marginBottom: 16 }}>
+                <h2 style={{ margin: '0 0 2px', fontFamily: F.heading, fontWeight: 700, fontSize: 18, color: C.text1, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                    FINANCING OPPORTUNITIES
                 </h2>
-                <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>Browse live auctions, submit confidential bids, earn yield at maturity.</p>
-            </motion.div>
+                <p style={{ margin: 0, fontFamily: F.body, color: C.text3, fontSize: 13 }}>Browse live auctions, submit bids, earn yield at maturity.</p>
+            </div>
 
             {bankScore && <BankCertBanner bs={bankScore} loading={loadingBankScore} onRefresh={refreshBankScore} />}
             {!bankScore && !loadingBankScore && (
-                <GlassCard style={{ marginBottom: 20, textAlign: 'center', padding: '16px 20px' }}>
-                    <Btn color={C.gold} onClick={refreshBankScore} disabled={loadingBankScore} style={{ background: C.instGrad }}>
-                        {loadingBankScore ? '⏳ Generating...' : '🏦 Generate Bank Certification'}
+                <GlassCard style={{ marginBottom: 14, textAlign: 'center', padding: '12px 16px' }}>
+                    <Btn color={C.amber} onClick={refreshBankScore} disabled={loadingBankScore}>
+                        {loadingBankScore ? 'GENERATING…' : 'GENERATE BANK CERTIFICATION'}
                     </Btn>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Required before you can place bids</div>
+                    <div style={{ fontFamily: F.body, fontSize: 12, color: C.text3, marginTop: 4 }}>Required before placing bids</div>
                 </GlassCard>
             )}
 
-            <motion.div variants={stagger} initial="hidden" animate="visible" style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Open Auctions" value={openAuctions.length} color={C.primary} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="My Bids" value={Object.values(bidStatuses).filter(b => b.hasBid).length} color={C.gold} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Active Loans" value={activeLoans.length} color={C.green} /></motion.div>
-                <motion.div variants={fadeUp} style={{ flex: 1, minWidth: 120 }}><Stat label="Settled" value={paidInvoices.length} color={C.muted} /></motion.div>
-            </motion.div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                <Stat label="Open Auctions" value={openAuctions.length} color={C.red} />
+                <Stat label="My Bids" value={Object.values(bidStatuses).filter(b => b.hasBid).length} color={C.amber} />
+                <Stat label="Active Loans" value={activeLoans.length} color={C.green} />
+                <Stat label="Settled" value={paidInvoices.length} color={C.text3} />
+            </div>
 
-            <div style={{ display: 'flex', gap: 2, borderBottom: `2px solid ${C.border}`, marginBottom: 24 }}>
-                <Tab label="Discover" active={tab === 'discover'} count={openAuctions.length} onClick={() => setTab('discover')} accent={C.gold} />
-                <Tab label="My Loans" active={tab === 'loans'} count={activeLoans.length} onClick={() => setTab('loans')} accent={C.gold} />
-                <Tab label="Archive" active={tab === 'archive'} count={paidInvoices.length} onClick={() => setTab('archive')} accent={C.gold} />
+            <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
+                <Tab label="Discover" active={tab === 'discover'} count={openAuctions.length} onClick={() => setTab('discover')} accent={C.amber} />
+                <Tab label="My Loans" active={tab === 'loans'} count={activeLoans.length} onClick={() => setTab('loans')} accent={C.amber} />
+                <Tab label="Archive" active={tab === 'archive'} count={paidInvoices.length} onClick={() => setTab('archive')} accent={C.amber} />
             </div>
 
             <AnimatePresence mode="wait">
                 {tab === 'discover' && (
-                    <motion.div key="discover" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>Open Auctions</h4>
+                    <div key="discover">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>OPEN AUCTIONS</h4>
                         {openAuctions.length === 0 ? (
-                            <EmptyState icon="🔍" message="No open auctions right now. Check back soon." />
+                            <EmptyState icon="—" message="No open auctions right now." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {openAuctions.map(a => (
                                     <AuctionBidCard
                                         key={a.contractId}
@@ -1262,58 +1315,58 @@ const InstitutionDashboard: React.FC = () => {
                                         bidBlockedReason={bankScore?.reason}
                                     />
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
 
                 {tab === 'loans' && (
-                    <motion.div key="loans" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>My Loans</h4>
+                    <div key="loans">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>MY LOANS</h4>
                         {activeLoans.length === 0 ? (
-                            <EmptyState icon="💼" message="No active loans. Win an auction to start earning yield." />
+                            <EmptyState icon="—" message="No active loans. Win an auction to start." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {activeLoans.map(inv => {
                                     const bo = bankOwnerships.find(b => b.invoiceId === inv.invoiceId);
                                     return (
                                         <GlassCard key={inv.contractId}>
-                                            <div style={{ fontWeight: 800, color: C.text, marginBottom: 4 }}>#{inv.invoiceId}</div>
-                                            <div style={{ fontSize: 14, color: C.text, marginBottom: 10 }}>{inv.description}</div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 8 }}>
-                                                <Stat label="Face Value" value={fmt$(inv.amount)} color={C.gold} />
-                                                {bo && <Stat label="Purchase Rate" value={`${bo.purchaseRate.toFixed(2)}%`} color={C.primary} />}
+                                            <div style={{ fontFamily: F.mono, fontWeight: 700, color: C.text1, marginBottom: 2, fontSize: 13 }}>#{inv.invoiceId}</div>
+                                            <div style={{ fontFamily: F.body, fontSize: 13, color: C.text1, marginBottom: 8 }}>{inv.description}</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 6 }}>
+                                                <Stat label="Face Value" value={fmt$(inv.amount)} color={C.amber} />
+                                                {bo && <Stat label="Rate" value={`${bo.purchaseRate.toFixed(2)}%`} color={C.teal} />}
                                                 {bo && <Stat label="Paid" value={fmt$(bo.purchaseAmount)} color={C.green} />}
                                             </div>
-                                            <div style={{ fontSize: 13, color: C.muted }}>Due {inv.dueDate} · {daysUntil(inv.dueDate)} days to maturity</div>
-                                            {bo && <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 6 }}>Expected yield: {fmt$((bo.faceValue ?? inv.amount) - bo.purchaseAmount)} at maturity</div>}
+                                            <div style={{ fontFamily: F.mono, fontSize: 12, color: C.text3 }}>Due {inv.dueDate} · {daysUntil(inv.dueDate)}d to maturity</div>
+                                            {bo && <div style={{ fontFamily: F.mono, fontSize: 12, color: C.green, fontWeight: 700, marginTop: 4 }}>Yield: {fmt$((bo.faceValue ?? inv.amount) - bo.purchaseAmount)}</div>}
                                         </GlassCard>
                                     );
                                 })}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
 
                 {tab === 'archive' && (
-                    <motion.div key="archive" variants={fadeIn} initial="hidden" animate="visible" exit="exit">
-                        <h4 style={{ margin: '0 0 16px', fontWeight: 800, color: C.text }}>Settled Loans</h4>
+                    <div key="archive">
+                        <h4 style={{ margin: '0 0 10px', fontFamily: F.heading, fontWeight: 700, color: C.text1, fontSize: 14, textTransform: 'uppercase' as const, letterSpacing: '1px' }}>SETTLED LOANS</h4>
                         {paidInvoices.length === 0 ? (
-                            <EmptyState icon="📦" message="No settled loans yet." />
+                            <EmptyState icon="—" message="No settled loans yet." />
                         ) : (
-                            <motion.div variants={stagger} initial="hidden" animate="visible">
+                            <div>
                                 {paidInvoices.map(inv => (
-                                    <GlassCard key={inv.contractId} style={{ padding: '14px 18px' }}>
+                                    <GlassCard key={inv.contractId} style={{ padding: '10px 14px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                                            <span style={{ color: C.text }}>#{inv.invoiceId} — {inv.description}</span>
-                                            <span style={{ fontWeight: 800, color: C.green }}>{fmt$(inv.amount)}</span>
+                                            <span style={{ fontFamily: F.body, color: C.text1 }}>#{inv.invoiceId} — {inv.description}</span>
+                                            <span style={{ fontFamily: F.mono, fontWeight: 700, color: C.green }}>{fmt$(inv.amount)}</span>
                                         </div>
                                         <EvmSettlementBadge bridgeState={(inv as any).bridgeState} txHash={(inv as any).paymentTxHash} />
                                     </GlassCard>
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
         </div>
@@ -1344,7 +1397,7 @@ const DashboardView: React.FC = () => {
                 <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
-                    style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid var(--c-border)', borderTopColor: 'var(--c-primary)' }}
+                    style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${C.border}`, borderTopColor: C.red }}
                 />
             </div>
         );
@@ -1357,7 +1410,7 @@ const DashboardView: React.FC = () => {
     const isCompany = myProfile.type === 'COMPANY';
 
     return (
-        <div style={{ minHeight: '100vh', paddingTop: 24 }}>
+        <div style={{ minHeight: '100vh', paddingTop: 16 }}>
             {isCompany ? <CompanyDashboard /> : <InstitutionDashboard />}
         </div>
     );

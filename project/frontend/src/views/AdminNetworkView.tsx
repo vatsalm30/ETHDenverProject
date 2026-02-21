@@ -4,9 +4,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const C = {
-    primary: '#FF4B6E', text: '#1E293B', muted: '#94A3B8', border: '#F1F5F9',
-    green: '#10B981', gold: '#F59E0B', bg: '#FFFFFF',
+const F = {
+    heading: "'Barlow Condensed', sans-serif",
+    mono: "'Share Tech Mono', monospace",
+    body: "'Barlow', sans-serif",
 };
 
 interface BankRow {
@@ -21,11 +22,11 @@ interface BankRow {
     proofZ_status: string;
 }
 
-const TIER_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-    CERTIFIED:      { label: 'CERTIFIED',      color: '#065f46', bg: '#D1FAE5', icon: '✓' },
-    PROBATIONARY:   { label: 'PROBATIONARY',   color: '#92400e', bg: '#FEF3C7', icon: '⏳' },
-    SUSPENDED:      { label: 'SUSPENDED',      color: '#991b1b', bg: '#FEE2E2', icon: '✗' },
-    RATE_VIOLATION: { label: 'RATE VIOLATION',  color: '#7c2d12', bg: '#FED7AA', icon: '⚠' },
+const TIER_CFG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    CERTIFIED:      { label: 'CERTIFIED',      color: 'var(--green)',  bg: 'rgba(63,185,80,0.10)',  border: 'rgba(63,185,80,0.25)' },
+    PROBATIONARY:   { label: 'PROBATIONARY',   color: 'var(--amber)',  bg: 'var(--amber-bg)',       border: 'rgba(210,153,34,0.25)' },
+    SUSPENDED:      { label: 'SUSPENDED',      color: 'var(--red)',    bg: 'var(--red-bg)',         border: 'rgba(232,0,45,0.25)' },
+    RATE_VIOLATION: { label: 'RATE VIOLATION',  color: 'var(--red)',    bg: 'var(--red-bg)',         border: 'rgba(232,0,45,0.25)' },
 };
 
 const AdminNetworkView: React.FC = () => {
@@ -57,72 +58,80 @@ const AdminNetworkView: React.FC = () => {
     }, []);
 
     return (
-        <div style={{ background: 'linear-gradient(160deg, #F0F9FF 0%, #E0F2FE 40%, #F0FDF4 100%)', minHeight: '100vh', paddingTop: 24 }}>
-            <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 16px 40px' }}>
-                <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}>
-                    <h2 style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 22, color: C.text }}>
-                        Canton Network — Bank Certification Status
+        <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingTop: 16 }}>
+            <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 14px 32px' }}>
+                <div style={{ marginBottom: 14 }}>
+                    <h2 style={{ margin: '0 0 2px', fontFamily: F.heading, fontWeight: 700, fontSize: 18, color: 'var(--text-1)', textTransform: 'uppercase' as const, letterSpacing: '1px' }}>
+                        CANTON NETWORK — BANK CERTIFICATION
                     </h2>
-                    <p style={{ margin: '0 0 20px', color: C.muted, fontSize: 14 }}>
+                    <p style={{ margin: 0, fontFamily: F.body, color: 'var(--text-3)', fontSize: 13 }}>
                         Synchronizer admin view. All banks on the network.
                     </p>
-                </motion.div>
-
-                {/* Summary row */}
-                <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-                    <StatCard label="Total Banks" value={banks.length} color="#6366f1" />
-                    <StatCard label="Certified" value={certifiedCount} color={C.green} />
-                    <StatCard label="Avg Rate" value={networkAvgRate > 0 ? `${(networkAvgRate / 100).toFixed(2)}%` : '—'} color={C.gold} />
-                    <StatCard label="Contributing to Avg" value={certifiedCount} color={C.muted} />
                 </div>
 
-                {/* Bank table */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <StatCard label="Total Banks" value={banks.length} color="var(--red)" />
+                    <StatCard label="Certified" value={certifiedCount} color="var(--green)" />
+                    <StatCard label="Avg Rate" value={networkAvgRate > 0 ? `${(networkAvgRate / 100).toFixed(2)}%` : '—'} color="var(--amber)" />
+                    <StatCard label="Contributing" value={certifiedCount} color="var(--text-3)" />
+                </div>
+
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: C.muted }}>
-                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }} style={{ fontSize: 32, display: 'inline-block' }}>🏦</motion.div>
-                        <div style={{ marginTop: 8 }}>Loading bank data...</div>
+                    <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-3)' }}>
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }} style={{ fontSize: 24, display: 'inline-block' }}>◎</motion.div>
+                        <div style={{ fontFamily: F.mono, fontSize: 12, marginTop: 6 }}>Loading bank data...</div>
                     </div>
                 ) : banks.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: C.muted }}>
+                    <div style={{ textAlign: 'center', padding: 32, fontFamily: F.body, color: 'var(--text-3)', fontSize: 13 }}>
                         No banks registered yet.
                     </div>
                 ) : (
-                    <div style={{ background: C.bg, borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+                    <div style={{ border: '1px solid var(--border)', overflow: 'hidden' }}>
                         <div style={{
-                            display: 'grid', gridTemplateColumns: '1fr 160px 60px 100px',
-                            padding: '12px 20px', background: '#F8FAFC',
-                            fontSize: 11, fontWeight: 800, color: C.muted, textTransform: 'uppercase' as const,
+                            display: 'grid', gridTemplateColumns: '1fr 150px 60px 100px',
+                            padding: '8px 14px', background: 'var(--surface2)',
+                            fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700,
+                            color: 'var(--text-3)', textTransform: 'uppercase' as const,
+                            letterSpacing: '2.5px',
                         }}>
                             <span>Bank</span><span>Tier</span><span>Score</span><span>Status</span>
                         </div>
                         <AnimatePresence>
-                            {banks.map((b, i) => {
+                            {banks.map((b) => {
                                 const t = TIER_CFG[b.tier] ?? TIER_CFG.SUSPENDED;
                                 return (
-                                    <motion.div
+                                    <div
                                         key={b.bank}
-                                        initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: i * 0.04 }}
                                         style={{
-                                            display: 'grid', gridTemplateColumns: '1fr 160px 60px 100px',
-                                            padding: '14px 20px', borderTop: `1px solid ${C.border}`,
+                                            display: 'grid', gridTemplateColumns: '1fr 150px 60px 100px',
+                                            padding: '10px 14px', borderTop: '1px solid var(--border)',
                                             alignItems: 'center', fontSize: 13,
+                                            background: 'var(--surface)',
                                         }}
                                     >
-                                        <span style={{ fontWeight: 700, color: C.text }}>{b.bank}</span>
+                                        <span style={{ fontFamily: F.body, fontWeight: 600, color: 'var(--text-1)' }}>{b.bank}</span>
                                         <span style={{
-                                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                                            padding: '3px 10px', borderRadius: 999,
+                                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                                            padding: '2px 7px',
                                             background: t.bg, color: t.color,
-                                            fontWeight: 800, fontSize: 11, width: 'fit-content',
+                                            border: `1px solid ${t.border}`,
+                                            fontFamily: F.heading, fontWeight: 700,
+                                            fontSize: '0.65rem',
+                                            textTransform: 'uppercase' as const,
+                                            letterSpacing: '1px',
+                                            width: 'fit-content',
                                         }}>
-                                            {t.icon} {t.label}
+                                            {t.label}
                                         </span>
-                                        <span style={{ fontWeight: 800, color: C.text }}>{b.totalScore}/3</span>
-                                        <span style={{ fontSize: 12, fontWeight: 700, color: b.canBid ? C.green : '#991b1b' }}>
-                                            {b.canBid ? 'Can bid ✓' : 'Bidding disabled'}
+                                        <span style={{ fontFamily: F.mono, fontWeight: 700, color: 'var(--text-1)', fontSize: 12 }}>{b.totalScore}/3</span>
+                                        <span style={{
+                                            fontFamily: F.heading, fontSize: 11, fontWeight: 700,
+                                            color: b.canBid ? 'var(--green)' : 'var(--red)',
+                                            textTransform: 'uppercase' as const, letterSpacing: '0.5px',
+                                        }}>
+                                            {b.canBid ? 'CAN BID' : 'DISABLED'}
                                         </span>
-                                    </motion.div>
+                                    </div>
                                 );
                             })}
                         </AnimatePresence>
@@ -135,12 +144,13 @@ const AdminNetworkView: React.FC = () => {
 
 const StatCard: React.FC<{ label: string; value: React.ReactNode; color: string }> = ({ label, value, color }) => (
     <div style={{
-        flex: 1, minWidth: 120, background: '#FFFFFF', borderRadius: 14,
-        padding: '16px 18px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        border: '1px solid #F1F5F9',
+        flex: 1, minWidth: 100,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        padding: '10px 14px',
     }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' as const, marginBottom: 4 }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color }}>{value}</div>
+        <div style={{ fontFamily: F.heading, fontSize: '0.59rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' as const, letterSpacing: '2.5px', marginBottom: 2 }}>{label}</div>
+        <div style={{ fontFamily: F.mono, fontSize: 20, fontWeight: 900, color }}>{value}</div>
     </div>
 );
 
